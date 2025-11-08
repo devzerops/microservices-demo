@@ -1,0 +1,187 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authservice
+  labels:
+    app: authservice
+spec:
+  selector:
+    matchLabels:
+      app: authservice
+  template:
+    metadata:
+      labels:
+        app: authservice
+    spec:
+      serviceAccountName: authservice
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: server
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+          image: authservice
+          ports:
+          - containerPort: 8080
+          readinessProbe:
+            grpc:
+              port: 8080
+          livenessProbe:
+            grpc:
+              port: 8080
+          env:
+          - name: PORT
+            value: "8080"
+          - name: DATABASE_URL
+            value: "postgres://authuser:authpassword@postgres-auth:5432/authdb?sslmode=disable"
+          - name: JWT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: auth-secrets
+                key: jwt-secret
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authservice
+  labels:
+    app: authservice
+spec:
+  type: ClusterIP
+  selector:
+    app: authservice
+  ports:
+  - name: grpc
+    port: 8080
+    targetPort: 8080
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: authservice
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-auth
+  labels:
+    app: postgres-auth
+spec:
+  selector:
+    matchLabels:
+      app: postgres-auth
+  template:
+    metadata:
+      labels:
+        app: postgres-auth
+    spec:
+      securityContext:
+        fsGroup: 999
+        runAsGroup: 999
+        runAsNonRoot: true
+        runAsUser: 999
+      containers:
+      - name: postgres
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          privileged: false
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: "authdb"
+        - name: POSTGRES_USER
+          value: "authuser"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: auth-secrets
+              key: postgres-password
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - pg_isready -U authuser -d authdb
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - pg_isready -U authuser -d authdb
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: postgres-data
+        resources:
+          limits:
+            memory: 256Mi
+            cpu: 200m
+          requests:
+            cpu: 100m
+            memory: 128Mi
+      volumes:
+      - name: postgres-data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-auth
+  labels:
+    app: postgres-auth
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres-auth
+  ports:
+  - name: tcp-postgres
+    port: 5432
+    targetPort: 5432
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: auth-secrets
+type: Opaque
+stringData:
+  jwt-secret: "your-secret-jwt-key-change-this-in-production"
+  postgres-password: "authpassword"
