@@ -46,6 +46,22 @@ dependencies {
         runtimeOnly "com.fasterxml.jackson.core:jackson-core:${jacksonCoreVersion}",
                 "com.fasterxml.jackson.core:jackson-databind:${jacksonDatabindVersion}",
                 "io.netty:netty-tcnative-boringssl-static:2.0.69.Final"
+
+        // Test dependencies
+        testImplementation "org.junit.jupiter:junit-jupiter-api:5.11.3"
+        testImplementation "org.junit.jupiter:junit-jupiter-params:5.11.3"
+        testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:5.11.3"
+        testImplementation "org.mockito:mockito-core:5.14.2"
+        testImplementation "org.mockito:mockito-junit-jupiter:5.14.2"
+        testImplementation "io.grpc:grpc-testing:${grpcVersion}"
+    }
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
     }
 }
 
