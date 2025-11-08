@@ -14,10 +14,6 @@ import (
 	"github.com/gorilla/mux"
 )
 
-const (
-	port = "8091"
-)
-
 var (
 	logger *log.Logger
 )
@@ -27,6 +23,10 @@ func init() {
 }
 
 func main() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8094"
+	}
 	logger.Printf("Starting Gamification Service on port %s", port)
 
 	router := mux.NewRouter()

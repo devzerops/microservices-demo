@@ -21,6 +21,6 @@ WORKDIR /root/
 
 COPY --from=builder /app/gamificationservice .
 
-EXPOSE 8091
+EXPOSE 8094
 
 CMD ["./gamificationservice"]
