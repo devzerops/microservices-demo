@@ -121,6 +121,64 @@ services:
           cpus: '0.25'
           memory: 128M
 
+  # Search Service - Autocomplete and trending queries
+  search:
+    build:
+      context: ./src/searchservice
+      dockerfile: Dockerfile
+    container_name: search
+    ports:
+      - "8097:8097"
+    environment:
+      - PORT=8097
+      - LOG_LEVEL=INFO
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8097/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - experimental-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # Analytics Service - Real-time dashboard and metrics
+  analytics:
+    build:
+      context: ./src/analyticsservice
+      dockerfile: Dockerfile
+    container_name: analytics
+    ports:
+      - "8099:8099"
+    environment:
+      - PORT=8099
+      - LOG_LEVEL=INFO
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8099/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - experimental-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
 networks:
   experimental-network:
     driver: bridge

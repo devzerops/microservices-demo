@@ -27,6 +27,8 @@ start-experimental: ## Start all experimental services
 	@echo "  Gamification:     http://localhost:8094"
 	@echo "  Inventory:        http://localhost:8092"
 	@echo "  PWA:              http://localhost:8095"
+	@echo "  Search:           http://localhost:8097"
+	@echo "  Analytics:        http://localhost:8099"
 	@echo ""
 	@echo "Run '$(GREEN)make logs-experimental$(NC)' to view logs"
 
@@ -55,6 +57,12 @@ logs-inventory: ## View Inventory service logs
 logs-pwa: ## View PWA service logs
 	docker-compose -f docker-compose-experimental.yml logs -f pwa
 
+logs-search: ## View Search service logs
+	docker-compose -f docker-compose-experimental.yml logs -f search
+
+logs-analytics: ## View Analytics service logs
+	docker-compose -f docker-compose-experimental.yml logs -f analytics
+
 ps-experimental: ## Show status of all experimental services
 	@docker-compose -f docker-compose-experimental.yml ps
 
@@ -65,6 +73,8 @@ health-check: ## Check health of all experimental services
 	@echo -n "Gamification:     "; curl -s http://localhost:8094/health > /dev/null 2>&1 && echo "$(GREEN)✓ Healthy$(NC)" || echo "$(RED)✗ Unhealthy$(NC)"
 	@echo -n "Inventory:        "; curl -s http://localhost:8092/health > /dev/null 2>&1 && echo "$(GREEN)✓ Healthy$(NC)" || echo "$(RED)✗ Unhealthy$(NC)"
 	@echo -n "PWA:              "; curl -s http://localhost:8095/health > /dev/null 2>&1 && echo "$(GREEN)✓ Healthy$(NC)" || echo "$(RED)✗ Unhealthy$(NC)"
+	@echo -n "Search:           "; curl -s http://localhost:8097/health > /dev/null 2>&1 && echo "$(GREEN)✓ Healthy$(NC)" || echo "$(RED)✗ Unhealthy$(NC)"
+	@echo -n "Analytics:        "; curl -s http://localhost:8099/health > /dev/null 2>&1 && echo "$(GREEN)✓ Healthy$(NC)" || echo "$(RED)✗ Unhealthy$(NC)"
 
 clean-experimental: ## Stop and remove all experimental services and volumes
 	@echo "$(RED)Cleaning up experimental services...$(NC)"
@@ -111,6 +121,14 @@ dev-inventory: ## Run Inventory in development mode
 dev-pwa: ## Run PWA in development mode
 	@echo "$(BLUE)Starting PWA in dev mode...$(NC)"
 	cd src/pwa-service && npm install && npm run dev
+
+dev-search: ## Run Search in development mode
+	@echo "$(BLUE)Starting Search in dev mode...$(NC)"
+	cd src/searchservice && go run *.go
+
+dev-analytics: ## Run Analytics in development mode
+	@echo "$(BLUE)Starting Analytics in dev mode...$(NC)"
+	cd src/analyticsservice && go run *.go
 
 # Demo data
 demo-data: ## Load demo data into all services
