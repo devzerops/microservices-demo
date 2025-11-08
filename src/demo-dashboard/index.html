@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Microservices Demo Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <h1>🚀 Microservices Demo Dashboard</h1>
+      <p>Real-time monitoring and testing for all experimental services</p>
+    </header>
+
+    <!-- Service Status Overview -->
+    <section class="section">
+      <h2>📊 Service Status</h2>
+      <div id="service-status" class="service-grid">
+        <!-- Populated by JavaScript -->
+      </div>
+    </section>
+
+    <!-- Real-time Metrics -->
+    <section class="section">
+      <h2>📈 Real-time Metrics</h2>
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-value" id="total-requests">0</div>
+          <div class="metric-label">Total Requests</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value" id="active-users">0</div>
+          <div class="metric-label">Active Users</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value" id="avg-latency">0ms</div>
+          <div class="metric-label">Avg Latency</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value" id="error-rate">0%</div>
+          <div class="metric-label">Error Rate</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Service Demos -->
+    <section class="section">
+      <h2>🎮 Interactive Demos</h2>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab-button active" data-tab="search">🔍 Search</button>
+        <button class="tab-button" data-tab="visual">📷 Visual Search</button>
+        <button class="tab-button" data-tab="gamification">🎮 Gamification</button>
+        <button class="tab-button" data-tab="inventory">📦 Inventory</button>
+        <button class="tab-button" data-tab="analytics">📊 Analytics</button>
+      </div>
+
+      <!-- Tab Content -->
+      <div class="tab-content active" id="tab-search">
+        <h3>Search Autocomplete & Trending</h3>
+        <div class="demo-section">
+          <div class="input-group">
+            <input type="text" id="search-input" placeholder="Search for products..." />
+            <div id="autocomplete-results" class="autocomplete-dropdown"></div>
+          </div>
+
+          <div class="demo-results">
+            <div class="trending-section">
+              <h4>🔥 Trending Searches</h4>
+              <div id="trending-list"></div>
+            </div>
+            <div class="history-section">
+              <h4>📜 Recent Searches</h4>
+              <div id="search-history"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-visual">
+        <h3>Visual Search by Image</h3>
+        <div class="demo-section">
+          <div class="upload-zone" id="upload-zone">
+            <p>Drop an image here or click to upload</p>
+            <input type="file" id="image-upload" accept="image/*" hidden />
+          </div>
+          <div id="visual-search-results" class="demo-results"></div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-gamification">
+        <h3>Gamification System</h3>
+        <div class="demo-section">
+          <div class="user-profile">
+            <div class="input-group">
+              <input type="text" id="user-id-input" placeholder="Enter User ID" value="demo-user" />
+              <button id="load-profile-btn" class="btn-primary">Load Profile</button>
+            </div>
+          </div>
+
+          <div id="user-stats" class="user-stats-grid"></div>
+
+          <div class="action-buttons">
+            <button id="award-points-btn" class="btn-action">🎁 Award 100 Points</button>
+            <button id="spin-wheel-btn" class="btn-action">🎰 Spin Lucky Wheel</button>
+            <button id="daily-mission-btn" class="btn-action">📋 Check Daily Missions</button>
+          </div>
+
+          <div id="gamification-results"></div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-inventory">
+        <h3>Real-time Inventory</h3>
+        <div class="demo-section">
+          <div class="input-group">
+            <input type="text" id="product-id-input" placeholder="Product ID" value="OLJCESPC7Z" />
+            <button id="check-inventory-btn" class="btn-primary">Check Inventory</button>
+            <button id="connect-ws-btn" class="btn-secondary">Connect WebSocket</button>
+          </div>
+
+          <div id="inventory-results" class="demo-results">
+            <div class="connection-status">
+              <span id="ws-status" class="status-badge offline">WebSocket: Disconnected</span>
+            </div>
+            <div id="inventory-data"></div>
+            <div id="inventory-updates"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-analytics">
+        <h3>Analytics Dashboard</h3>
+        <div class="demo-section">
+          <div class="analytics-grid">
+            <div class="analytics-card">
+              <h4>Service Health</h4>
+              <div id="service-health-chart"></div>
+            </div>
+            <div class="analytics-card">
+              <h4>Recent Events</h4>
+              <div id="recent-events"></div>
+            </div>
+            <div class="analytics-card">
+              <h4>Top Endpoints</h4>
+              <div id="top-endpoints"></div>
+            </div>
+            <div class="analytics-card">
+              <h4>Real-time Activity</h4>
+              <div id="realtime-activity"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Logs -->
+    <section class="section">
+      <h2>📝 Activity Log</h2>
+      <div id="activity-log" class="activity-log"></div>
+    </section>
+  </div>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>

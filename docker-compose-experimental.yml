@@ -179,6 +179,78 @@ services:
           cpus: '0.25'
           memory: 256M
 
+  # API Gateway - Unified entry point for all services
+  apigateway:
+    build:
+      context: ./src/apigateway
+      dockerfile: Dockerfile
+    container_name: apigateway
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - LOG_LEVEL=INFO
+      - VISUAL_SEARCH_URL=http://visualsearch:8093
+      - GAMIFICATION_URL=http://gamification:8094
+      - INVENTORY_URL=http://inventory:8092
+      - PWA_URL=http://pwa:8095
+      - SEARCH_URL=http://search:8097
+      - ANALYTICS_URL=http://analytics:8099
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      - visualsearch
+      - gamification
+      - inventory
+      - pwa
+      - search
+      - analytics
+    networks:
+      - experimental-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # Demo Dashboard - Interactive web interface
+  demo:
+    build:
+      context: ./src/demo-dashboard
+      dockerfile: Dockerfile
+    container_name: demo
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    depends_on:
+      - apigateway
+    networks:
+      - experimental-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
 networks:
   experimental-network:
     driver: bridge

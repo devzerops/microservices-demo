@@ -23,13 +23,16 @@ start-experimental: ## Start all experimental services
 	@echo "$(GREEN)Services started!$(NC)"
 	@echo ""
 	@echo "$(BLUE)Service URLs:$(NC)"
-	@echo "  Visual Search:    http://localhost:8093"
-	@echo "  Gamification:     http://localhost:8094"
-	@echo "  Inventory:        http://localhost:8092"
-	@echo "  PWA:              http://localhost:8095"
-	@echo "  Search:           http://localhost:8097"
-	@echo "  Analytics:        http://localhost:8099"
+	@echo "  🌐 API Gateway:     http://localhost:8080"
+	@echo "  🎨 Demo Dashboard:  http://localhost:3000"
+	@echo "  📷 Visual Search:   http://localhost:8093"
+	@echo "  🎮 Gamification:    http://localhost:8094"
+	@echo "  📦 Inventory:       http://localhost:8092"
+	@echo "  📱 PWA:             http://localhost:8095"
+	@echo "  🔍 Search:          http://localhost:8097"
+	@echo "  📊 Analytics:       http://localhost:8099"
 	@echo ""
+	@echo "$(GREEN)🚀 Open http://localhost:3000 for interactive demo!$(NC)"
 	@echo "Run '$(GREEN)make logs-experimental$(NC)' to view logs"
 
 stop-experimental: ## Stop all experimental services
@@ -63,12 +66,20 @@ logs-search: ## View Search service logs
 logs-analytics: ## View Analytics service logs
 	docker-compose -f docker-compose-experimental.yml logs -f analytics
 
+logs-gateway: ## View API Gateway logs
+	docker-compose -f docker-compose-experimental.yml logs -f apigateway
+
+logs-demo: ## View Demo Dashboard logs
+	docker-compose -f docker-compose-experimental.yml logs -f demo
+
 ps-experimental: ## Show status of all experimental services
 	@docker-compose -f docker-compose-experimental.yml ps
 
 health-check: ## Check health of all experimental services
 	@echo "$(BLUE)Checking service health...$(NC)"
 	@echo ""
+	@echo -n "API Gateway:      "; curl -s http://localhost:8080/health > /dev/null 2>&1 && echo "$(GREEN)✓ Healthy$(NC)" || echo "$(RED)✗ Unhealthy$(NC)"
+	@echo -n "Demo Dashboard:   "; curl -s http://localhost:3000/ > /dev/null 2>&1 && echo "$(GREEN)✓ Healthy$(NC)" || echo "$(RED)✗ Unhealthy$(NC)"
 	@echo -n "Visual Search:    "; curl -s http://localhost:8093/health > /dev/null 2>&1 && echo "$(GREEN)✓ Healthy$(NC)" || echo "$(RED)✗ Unhealthy$(NC)"
 	@echo -n "Gamification:     "; curl -s http://localhost:8094/health > /dev/null 2>&1 && echo "$(GREEN)✓ Healthy$(NC)" || echo "$(RED)✗ Unhealthy$(NC)"
 	@echo -n "Inventory:        "; curl -s http://localhost:8092/health > /dev/null 2>&1 && echo "$(GREEN)✓ Healthy$(NC)" || echo "$(RED)✗ Unhealthy$(NC)"
@@ -130,6 +141,14 @@ dev-analytics: ## Run Analytics in development mode
 	@echo "$(BLUE)Starting Analytics in dev mode...$(NC)"
 	cd src/analyticsservice && go run *.go
 
+dev-gateway: ## Run API Gateway in development mode
+	@echo "$(BLUE)Starting API Gateway in dev mode...$(NC)"
+	cd src/apigateway && go run *.go
+
+dev-demo: ## Run Demo Dashboard in development mode
+	@echo "$(BLUE)Starting Demo Dashboard in dev mode...$(NC)"
+	cd src/demo-dashboard && npm install && npm start
+
 # Demo data
 demo-data: ## Load demo data into all services
 	@echo "$(BLUE)Loading demo data...$(NC)"
@@ -153,6 +172,16 @@ docs: ## Open integration documentation
 		open EXPERIMENTAL_SERVICES_INTEGRATION.md; \
 	else \
 		echo "Please open EXPERIMENTAL_SERVICES_INTEGRATION.md manually"; \
+	fi
+
+open-demo: ## Open demo dashboard in browser
+	@echo "$(BLUE)Opening demo dashboard...$(NC)"
+	@if command -v xdg-open > /dev/null; then \
+		xdg-open http://localhost:3000; \
+	elif command -v open > /dev/null; then \
+		open http://localhost:3000; \
+	else \
+		echo "Please open http://localhost:3000 manually"; \
 	fi
 
 # Default target

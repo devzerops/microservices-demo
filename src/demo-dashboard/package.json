@@ -1,0 +1,20 @@
+{
+  "name": "demo-dashboard",
+  "version": "1.0.0",
+  "description": "Interactive demo dashboard for microservices",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [
+    "microservices",
+    "dashboard",
+    "demo"
+  ],
+  "author": "Online Boutique Team",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
