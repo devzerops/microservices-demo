@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Browse and shop products even when offline">
+  <meta name="theme-color" content="#326ce5">
+
+  <title>Online Boutique - Shop Anywhere</title>
+
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/css/styles.css">
+
+  <!-- iOS Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Boutique">
+  <link rel="apple-touch-icon" href="/images/icons/icon-192x192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="/images/icons/icon-192x192.png">
+
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f5f5f5;
+    }
+
+    .header {
+      background: #326ce5;
+      color: white;
+      padding: 1rem 2rem;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 1.5rem;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 2rem auto;
+      padding: 0 2rem;
+    }
+
+    .hero {
+      background: white;
+      border-radius: 8px;
+      padding: 3rem;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      margin-bottom: 2rem;
+    }
+
+    .hero h2 {
+      font-size: 2rem;
+      margin: 0 0 1rem 0;
+      color: #333;
+    }
+
+    .hero p {
+      font-size: 1.1rem;
+      color: #666;
+      line-height: 1.6;
+      max-width: 600px;
+      margin: 0 auto 2rem auto;
+    }
+
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .feature-card {
+      background: white;
+      border-radius: 8px;
+      padding: 2rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .feature-card .icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+
+    .feature-card h3 {
+      margin: 0 0 0.5rem 0;
+      color: #333;
+      font-size: 1.3rem;
+    }
+
+    .feature-card p {
+      margin: 0;
+      color: #666;
+      line-height: 1.5;
+    }
+
+    .demo-section {
+      background: white;
+      border-radius: 8px;
+      padding: 2rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .demo-section h3 {
+      margin: 0 0 1rem 0;
+      color: #333;
+    }
+
+    .demo-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .demo-button {
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 4px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-weight: 600;
+    }
+
+    .demo-button.primary {
+      background: #326ce5;
+      color: white;
+    }
+
+    .demo-button.primary:hover {
+      background: #2558c7;
+    }
+
+    .demo-button.secondary {
+      background: #f0f0f0;
+      color: #333;
+    }
+
+    .demo-button.secondary:hover {
+      background: #e0e0e0;
+    }
+
+    .status-bar {
+      background: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      border-radius: 4px;
+    }
+
+    .status-bar.success {
+      background: #d4edda;
+      border-left-color: #28a745;
+    }
+
+    @media (max-width: 768px) {
+      .container {
+        padding: 0 1rem;
+      }
+
+      .hero {
+        padding: 2rem 1.5rem;
+      }
+
+      .hero h2 {
+        font-size: 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🛍️ Online Boutique PWA</h1>
+  </div>
+
+  <div class="container">
+    <div class="hero">
+      <h2>Shop Anywhere, Anytime</h2>
+      <p>
+        Experience seamless shopping with our Progressive Web App.
+        Browse products, manage your cart, and shop even when you're offline.
+      </p>
+      <div class="demo-buttons">
+        <button id="install-demo-button" class="demo-button primary" style="display: none;">
+          Install App
+        </button>
+        <button id="test-offline-button" class="demo-button secondary">
+          Test Offline Mode
+        </button>
+      </div>
+    </div>
+
+    <div id="status-message"></div>
+
+    <div class="features">
+      <div class="feature-card">
+        <div class="icon">📱</div>
+        <h3>Install to Home Screen</h3>
+        <p>
+          Add our app to your home screen for quick access.
+          Works like a native app with full-screen experience.
+        </p>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon">☁️</div>
+        <h3>Offline Support</h3>
+        <p>
+          Browse products and manage your cart even without internet.
+          Changes sync automatically when you're back online.
+        </p>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon">🔔</div>
+        <h3>Push Notifications</h3>
+        <p>
+          Get notified about sales, order updates, and special offers.
+          Stay connected with your favorite shop.
+        </p>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon">⚡</div>
+        <h3>Lightning Fast</h3>
+        <p>
+          Smart caching ensures instant page loads.
+          Navigate through products at blazing speed.
+        </p>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon">🔄</div>
+        <h3>Background Sync</h3>
+        <p>
+          Actions taken offline are queued and synced automatically.
+          Never lose your shopping progress.
+        </p>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon">🎨</div>
+        <h3>App-Like Experience</h3>
+        <p>
+          Full-screen interface, smooth animations, and native-like interactions.
+          The best of web and mobile apps.
+        </p>
+      </div>
+    </div>
+
+    <div class="demo-section">
+      <h3>Try PWA Features</h3>
+      <p>Test out the Progressive Web App capabilities:</p>
+
+      <div class="demo-buttons">
+        <button id="test-notification" class="demo-button secondary">
+          Test Notification
+        </button>
+        <button id="test-cache" class="demo-button secondary">
+          Test Caching
+        </button>
+        <button id="check-storage" class="demo-button secondary">
+          Check Storage
+        </button>
+        <button id="sync-data" class="demo-button secondary">
+          Sync Data
+        </button>
+      </div>
+
+      <div id="demo-output" style="margin-top: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 4px; display: none;">
+        <code id="demo-output-text" style="white-space: pre-wrap; font-size: 0.9rem;"></code>
+      </div>
+    </div>
+  </div>
+
+  <!-- Connection Status Indicator -->
+  <div id="connection-status"></div>
+
+  <!-- Install Button (managed by PWA Manager) -->
+  <button id="install-button">Install App</button>
+
+  <!-- Update Notification -->
+  <div id="update-notification">
+    <div class="content">
+      <p>A new version is available!</p>
+      <button id="reload-app">Update Now</button>
+    </div>
+  </div>
+
+  <!-- Notification Opt-in -->
+  <div id="notification-opt-in">
+    <h3>Enable Notifications?</h3>
+    <p>Get updates about sales, new products, and order status.</p>
+    <div class="buttons">
+      <button id="enable-notifications">Enable</button>
+      <button id="dismiss-notifications">Not Now</button>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+  <script>
+    // Demo functionality
+    document.getElementById('test-offline-button').addEventListener('click', () => {
+      window.location.href = '/offline.html';
+    });
+
+    document.getElementById('install-demo-button').addEventListener('click', () => {
+      if (window.pwaManager && window.pwaManager.deferredPrompt) {
+        window.pwaManager.deferredPrompt.prompt();
+      }
+    });
+
+    function showStatus(message, type = 'info') {
+      const statusDiv = document.getElementById('status-message');
+      statusDiv.innerHTML = `
+        <div class="status-bar ${type === 'success' ? 'success' : ''}">
+          ${message}
+        </div>
+      `;
+      setTimeout(() => {
+        statusDiv.innerHTML = '';
+      }, 5000);
+    }
+
+    function showOutput(text) {
+      const outputDiv = document.getElementById('demo-output');
+      const outputText = document.getElementById('demo-output-text');
+      outputText.textContent = text;
+      outputDiv.style.display = 'block';
+    }
+
+    // Test notification
+    document.getElementById('test-notification').addEventListener('click', async () => {
+      if (!('Notification' in window)) {
+        showStatus('Notifications not supported', 'error');
+        return;
+      }
+
+      if (Notification.permission === 'granted') {
+        new Notification('Test Notification', {
+          body: 'PWA notifications are working!',
+          icon: '/images/icons/icon-192x192.png',
+        });
+        showStatus('Notification sent!', 'success');
+      } else {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          new Notification('Permission Granted', {
+            body: 'You will now receive notifications',
+            icon: '/images/icons/icon-192x192.png',
+          });
+          showStatus('Notification permission granted!', 'success');
+        }
+      }
+    });
+
+    // Test caching
+    document.getElementById('test-cache').addEventListener('click', async () => {
+      const cacheNames = await caches.keys();
+      showOutput(`Active Caches:\n${cacheNames.join('\n')}\n\nTotal: ${cacheNames.length} cache(s)`);
+      showStatus('Cache information retrieved', 'success');
+    });
+
+    // Check storage
+    document.getElementById('check-storage').addEventListener('click', async () => {
+      if (navigator.storage && navigator.storage.estimate) {
+        const estimate = await navigator.storage.estimate();
+        const usedMB = (estimate.usage / 1024 / 1024).toFixed(2);
+        const quotaMB = (estimate.quota / 1024 / 1024).toFixed(2);
+        const percentUsed = ((estimate.usage / estimate.quota) * 100).toFixed(2);
+
+        showOutput(
+          `Storage Usage:\n` +
+          `Used: ${usedMB} MB\n` +
+          `Quota: ${quotaMB} MB\n` +
+          `Percentage: ${percentUsed}%`
+        );
+        showStatus('Storage information retrieved', 'success');
+      } else {
+        showStatus('Storage API not supported', 'error');
+      }
+    });
+
+    // Sync data
+    document.getElementById('sync-data').addEventListener('click', async () => {
+      if (window.pwaManager) {
+        await window.pwaManager.triggerBackgroundSync();
+        showStatus('Background sync triggered!', 'success');
+      } else {
+        showStatus('PWA Manager not initialized', 'error');
+      }
+    });
+
+    // Show install button if available
+    window.addEventListener('beforeinstallprompt', () => {
+      document.getElementById('install-demo-button').style.display = 'inline-block';
+    });
+
+    // Dismiss notification opt-in
+    const dismissBtn = document.getElementById('dismiss-notifications');
+    if (dismissBtn) {
+      dismissBtn.addEventListener('click', () => {
+        document.getElementById('notification-opt-in').style.display = 'none';
+      });
+    }
+  </script>
+</body>
+</html>

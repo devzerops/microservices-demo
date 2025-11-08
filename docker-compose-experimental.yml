@@ -1,0 +1,131 @@
+version: '3.8'
+
+services:
+  # Visual Search Service - Image-based product search
+  visualsearch:
+    build:
+      context: ./src/visualsearchservice
+      dockerfile: Dockerfile
+    container_name: visualsearch
+    ports:
+      - "8093:8093"
+    environment:
+      - PORT=8093
+      - LOG_LEVEL=INFO
+      - MODEL_NAME=MobileNetV2
+      - VECTOR_DIMENSION=1280
+    volumes:
+      - visual-search-cache:/app/cache
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8093/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - experimental-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  # Gamification Service - Points, badges, and rewards
+  gamification:
+    build:
+      context: ./src/gamificationservice
+      dockerfile: Dockerfile
+    container_name: gamification
+    ports:
+      - "8094:8094"
+    environment:
+      - PORT=8094
+      - LOG_LEVEL=INFO
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8094/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - experimental-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # Real-time Inventory Service - Live stock updates via WebSocket
+  inventory:
+    build:
+      context: ./src/inventoryservice
+      dockerfile: Dockerfile
+    container_name: inventory
+    ports:
+      - "8092:8092"
+    environment:
+      - PORT=8092
+      - LOG_LEVEL=INFO
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8092/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - experimental-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # PWA Service - Progressive Web App with offline support
+  pwa:
+    build:
+      context: ./src/pwa-service
+      dockerfile: Dockerfile
+    container_name: pwa
+    ports:
+      - "8095:8095"
+    environment:
+      - NODE_ENV=production
+      - PORT=8095
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8095/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - experimental-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+networks:
+  experimental-network:
+    driver: bridge
+    name: experimental-network
+
+volumes:
+  visual-search-cache:
+    name: visual-search-cache

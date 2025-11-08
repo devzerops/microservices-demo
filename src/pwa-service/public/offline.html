@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offline - Online Boutique</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+
+    .offline-container {
+      text-align: center;
+      padding: 2rem;
+      max-width: 500px;
+    }
+
+    .offline-icon {
+      font-size: 5rem;
+      margin-bottom: 1.5rem;
+      opacity: 0.9;
+    }
+
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+      font-weight: 600;
+    }
+
+    p {
+      font-size: 1.1rem;
+      line-height: 1.6;
+      margin-bottom: 2rem;
+      opacity: 0.9;
+    }
+
+    .retry-button {
+      background: rgba(255, 255, 255, 0.2);
+      border: 2px solid #fff;
+      color: #fff;
+      padding: 1rem 2rem;
+      font-size: 1rem;
+      border-radius: 50px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .retry-button:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    .cached-content {
+      margin-top: 2rem;
+      padding: 1.5rem;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      backdrop-filter: blur(10px);
+    }
+
+    .cached-content h2 {
+      font-size: 1.3rem;
+      margin-bottom: 1rem;
+    }
+
+    .cached-content ul {
+      list-style: none;
+      text-align: left;
+    }
+
+    .cached-content li {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .cached-content li:last-child {
+      border-bottom: none;
+    }
+
+    .status-indicator {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      background: #ff6b6b;
+      border-radius: 50%;
+      margin-right: 0.5rem;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.5;
+      }
+    }
+
+    .online .status-indicator {
+      background: #51cf66;
+      animation: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="offline-container">
+    <div class="offline-icon">☁️</div>
+
+    <h1>
+      <span class="status-indicator"></span>
+      You're Offline
+    </h1>
+
+    <p>
+      It looks like you've lost your internet connection.
+      Don't worry, you can still browse cached products and
+      items in your cart. Your changes will sync when you're back online.
+    </p>
+
+    <button class="retry-button" onclick="location.reload()">
+      Try Again
+    </button>
+
+    <div class="cached-content">
+      <h2>Available Offline:</h2>
+      <ul>
+        <li>✓ Browse previously viewed products</li>
+        <li>✓ View your shopping cart</li>
+        <li>✓ Add items to cart (will sync later)</li>
+        <li>✓ View saved preferences</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    // Listen for online event
+    window.addEventListener('online', () => {
+      document.body.classList.add('online');
+      const h1 = document.querySelector('h1');
+      h1.innerHTML = '<span class="status-indicator"></span>Back Online!';
+
+      setTimeout(() => {
+        location.reload();
+      }, 1500);
+    });
+
+    // Check connection status periodically
+    setInterval(() => {
+      if (navigator.onLine) {
+        location.reload();
+      }
+    }, 3000);
+  </script>
+</body>
+</html>

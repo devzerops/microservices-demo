@@ -1,0 +1,317 @@
+/* PWA Notification Styles */
+.pwa-notification {
+  position: fixed;
+  top: -100px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #323232;
+  color: white;
+  padding: 1rem 1.5rem;
+  border-radius: 4px;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+  z-index: 10000;
+  min-width: 300px;
+  max-width: 500px;
+  transition: top 0.3s ease;
+}
+
+.pwa-notification.show {
+  top: 20px;
+}
+
+.pwa-notification strong {
+  display: block;
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
+.pwa-notification p {
+  margin: 0;
+  font-size: 0.95rem;
+  opacity: 0.9;
+}
+
+/* Connection Status Indicator */
+#connection-status {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  z-index: 9999;
+  transition: all 0.3s ease;
+}
+
+#connection-status.online {
+  background: #51cf66;
+  color: white;
+}
+
+#connection-status.offline {
+  background: #ff6b6b;
+  color: white;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* Install Button */
+#install-button {
+  display: none;
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  background: #326ce5;
+  color: white;
+  border: none;
+  padding: 1rem 1.5rem;
+  border-radius: 50px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(50, 108, 229, 0.4);
+  transition: all 0.3s ease;
+  z-index: 9999;
+}
+
+#install-button:hover {
+  background: #2558c7;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(50, 108, 229, 0.5);
+}
+
+#install-button:active {
+  transform: translateY(0);
+}
+
+/* Update Notification */
+#update-notification {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #326ce5;
+  color: white;
+  padding: 1rem;
+  text-align: center;
+  z-index: 10000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+#update-notification .content {
+  max-width: 800px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+#update-notification p {
+  margin: 0;
+  flex: 1;
+}
+
+#reload-app {
+  background: white;
+  color: #326ce5;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+#reload-app:hover {
+  background: #f0f0f0;
+}
+
+/* Notification Opt-in */
+#notification-opt-in {
+  display: none;
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 1.5rem;
+  max-width: 400px;
+  z-index: 9999;
+}
+
+#notification-opt-in h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.2rem;
+  color: #333;
+}
+
+#notification-opt-in p {
+  margin: 0 0 1rem 0;
+  color: #666;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+#notification-opt-in .buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+#notification-opt-in button {
+  flex: 1;
+  padding: 0.75rem;
+  border: none;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+#enable-notifications {
+  background: #326ce5;
+  color: white;
+}
+
+#enable-notifications:hover {
+  background: #2558c7;
+}
+
+#dismiss-notifications {
+  background: #f0f0f0;
+  color: #666;
+}
+
+#dismiss-notifications:hover {
+  background: #e0e0e0;
+}
+
+/* Offline Cart Badge */
+.offline-cart-badge {
+  position: relative;
+}
+
+.offline-cart-badge::after {
+  content: attr(data-count);
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #ff6b6b;
+  color: white;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+/* Sync Status Indicator */
+.sync-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  background: #f8f9fa;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.sync-indicator.syncing {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.sync-indicator.synced {
+  background: #d4edda;
+  color: #155724;
+}
+
+.sync-indicator .spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Loading Skeleton for Offline Content */
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+  border-radius: 4px;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  #install-button {
+    bottom: 10px;
+    left: 10px;
+    padding: 0.75rem 1.25rem;
+    font-size: 0.9rem;
+  }
+
+  #connection-status {
+    bottom: 10px;
+    right: 10px;
+    font-size: 0.75rem;
+    padding: 0.4rem 0.8rem;
+  }
+
+  #notification-opt-in {
+    left: 1rem;
+    right: 1rem;
+    transform: none;
+    bottom: 70px;
+  }
+
+  .pwa-notification {
+    min-width: 280px;
+    left: 1rem;
+    right: 1rem;
+    transform: none;
+  }
+
+  #update-notification .content {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  #reload-app {
+    width: 100%;
+  }
+}
