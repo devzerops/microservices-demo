@@ -1,0 +1,5 @@
+pytest==8.3.4
+pytest-timeout==2.3.1
+grpcio==1.67.1
+grpcio-health-checking==1.67.1
+protobuf==5.29.1
