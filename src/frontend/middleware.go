@@ -26,6 +26,7 @@ import (
 
 type ctxKeyLog struct{}
 type ctxKeyRequestID struct{}
+type ctxKeyUser struct{}
 
 type logHandler struct {
 	log  *logrus.Logger

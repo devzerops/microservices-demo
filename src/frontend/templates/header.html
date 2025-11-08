@@ -88,6 +88,18 @@
                     </a>
                     {{ end }}
 
+                    {{ if $.user }}
+                    <div class="h-controls" style="margin-right: 15px;">
+                        <span class="user-greeting" style="margin-right: 10px;">Hello, {{ $.user.Name }}!</span>
+                        <a href="{{ $.baseUrl }}/logout" class="btn btn-sm btn-outline-secondary">Logout</a>
+                    </div>
+                    {{ else }}
+                    <div class="h-controls" style="margin-right: 15px;">
+                        <a href="{{ $.baseUrl }}/login" class="btn btn-sm btn-outline-primary" style="margin-right: 5px;">Login</a>
+                        <a href="{{ $.baseUrl }}/signup" class="btn btn-sm btn-primary">Sign Up</a>
+                    </div>
+                    {{ end }}
+
                     <a href="{{ $.baseUrl }}/cart" class="cart-link">
                         <img src="{{ $.baseUrl }}/static/icons/Hipster_CartIcon.svg" alt="Cart icon" class="logo" title="Cart" />
                         {{ if $.cart_size }}
