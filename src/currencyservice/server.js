@@ -192,4 +192,16 @@ function main () {
    );
 }
 
-main();
+// Export functions for testing
+module.exports = {
+  getSupportedCurrencies,
+  convert,
+  check,
+  _getCurrencyData,
+  _carry
+};
+
+// Only run main if this file is executed directly
+if (require.main === module) {
+  main();
+}
