@@ -196,8 +196,6 @@ func GetDailyMissions(userID string) []Mission {
 	mu.Lock()
 	defer mu.Unlock()
 
-	today := time.Now().Format("2006-01-02")
-
 	// Check if missions exist for today
 	if userMissionsMap[userID] == nil {
 		userMissionsMap[userID] = make(map[string]*Mission)
