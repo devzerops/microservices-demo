@@ -46,6 +46,12 @@ dependencies {
         runtimeOnly "com.fasterxml.jackson.core:jackson-core:${jacksonCoreVersion}",
                 "com.fasterxml.jackson.core:jackson-databind:${jacksonDatabindVersion}",
                 "io.netty:netty-tcnative-boringssl-static:2.0.69.Final"
+
+        testImplementation "org.junit.jupiter:junit-jupiter:5.10.1",
+                "org.mockito:mockito-core:5.8.0",
+                "org.mockito:mockito-junit-jupiter:5.8.0",
+                "io.grpc:grpc-testing:${grpcVersion}"
+        testRuntimeOnly "org.junit.platform:junit-platform-launcher"
     }
 }
 
@@ -78,6 +84,19 @@ sourceSets {
             srcDirs 'build/generated/source/proto/main/java/hipstershop'
             srcDirs 'build/generated/source/proto/main/grpc/hipstershop'
         }
+    }
+    test {
+        java {
+            srcDirs 'src/test/java'
+        }
+    }
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
     }
 }
 
