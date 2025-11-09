@@ -26,3 +26,9 @@ obj/
 pkg/
 release/wi-kubernetes-manifests.yaml
 vendor/
+coverage/
+.pytest_cache/
+__pycache__/
+*.coverage
+.coverage
+htmlcov/
