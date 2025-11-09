@@ -24,6 +24,7 @@ var (
 		"pwa":          getEnv("PWA_URL", "http://pwa:8095"),
 		"search":       getEnv("SEARCH_URL", "http://search:8097"),
 		"analytics":    getEnv("ANALYTICS_URL", "http://analytics:8099"),
+		"review":       getEnv("REVIEW_URL", "http://review:8096"),
 	}
 
 	rateLimiters = make(map[string]*rate.Limiter)

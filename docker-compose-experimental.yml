@@ -251,6 +251,34 @@ services:
           cpus: '0.1'
           memory: 64M
 
+  # Review Service - Product reviews and ratings
+  review:
+    build:
+      context: ./src/reviewservice
+      dockerfile: Dockerfile
+    container_name: review
+    ports:
+      - "8096:8096"
+    environment:
+      - PORT=8096
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8096/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - experimental-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
 networks:
   experimental-network:
     driver: bridge
