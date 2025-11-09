@@ -219,6 +219,10 @@ func (fe *frontendServer) productHandler(w http.ResponseWriter, r *http.Request)
 
 func (fe *frontendServer) addToCartHandler(w http.ResponseWriter, r *http.Request) {
 	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
+
+	// Limit request body size to prevent DoS attacks (10KB for form data)
+	r.Body = http.MaxBytesReader(w, r.Body, 10*1024)
+
 	quantity, err := strconv.ParseUint(r.FormValue("quantity"), 10, 32)
 	if err != nil {
 		renderHTTPError(log, r, w, errors.Wrap(err, "invalid quantity format"), http.StatusBadRequest)
@@ -251,6 +255,10 @@ func (fe *frontendServer) addToCartHandler(w http.ResponseWriter, r *http.Reques
 
 func (fe *frontendServer) emptyCartHandler(w http.ResponseWriter, r *http.Request) {
 	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
+
+	// Limit request body size to prevent DoS attacks (10KB for form data)
+	r.Body = http.MaxBytesReader(w, r.Body, 10*1024)
+
 	log.Debug("emptying cart")
 
 	if err := fe.emptyCart(r.Context(), sessionID(r)); err != nil {
@@ -332,6 +340,10 @@ func (fe *frontendServer) viewCartHandler(w http.ResponseWriter, r *http.Request
 
 func (fe *frontendServer) placeOrderHandler(w http.ResponseWriter, r *http.Request) {
 	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
+
+	// Limit request body size to prevent DoS attacks (10KB for form data)
+	r.Body = http.MaxBytesReader(w, r.Body, 10*1024)
+
 	log.Debug("placing order")
 
 	// Parse and validate numeric fields with proper error handling
@@ -602,6 +614,10 @@ func (fe *frontendServer) chatBotHandler(w http.ResponseWriter, r *http.Request)
 
 func (fe *frontendServer) setCurrencyHandler(w http.ResponseWriter, r *http.Request) {
 	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
+
+	// Limit request body size to prevent DoS attacks (10KB for form data)
+	r.Body = http.MaxBytesReader(w, r.Body, 10*1024)
+
 	cur := r.FormValue("currency_code")
 	payload := validator.SetCurrencyPayload{Currency: cur}
 	if err := payload.Validate(); err != nil {
