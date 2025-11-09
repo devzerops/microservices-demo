@@ -2,7 +2,7 @@
 
 ## Summary
 
-This PR implements major improvements to the microservices-demo project across **ten key areas**:
+This PR implements major improvements to the microservices-demo project across **eleven key areas**:
 1. **Test Coverage Expansion** (85% → 95%)
 2. **OpenTelemetry Integration** (Complete distributed tracing)
 3. **Code Quality Improvements** (Refactored duplicated code)
@@ -13,8 +13,9 @@ This PR implements major improvements to the microservices-demo project across *
 8. **AI/ML Flexibility** (Configurable LLM model versions)
 9. **Production Hardening - Session 3** (Security headers, timeouts, graceful shutdown, error handling)
 10. **Additional Security - Session 4** (Cookie security, CORS, request size limits)
+11. **Rate Limiting & Security Logging - Session 5** (DoS prevention, API abuse protection)
 
-**Total Issues Resolved**: 79 (22 security vulnerabilities: 2 Critical, 13 High, 7 Medium + 57 improvements)
+**Total Issues Resolved**: 81 (24 security vulnerabilities: 2 Critical, 13 High, 9 Medium + 57 improvements)
 
 **Key Production Features**:
 - ✅ Security headers on all HTTP services
@@ -26,6 +27,8 @@ This PR implements major improvements to the microservices-demo project across *
 - ✅ Cookie security with HttpOnly, Secure, SameSite flags
 - ✅ CORS configuration with origin whitelisting
 - ✅ Request body size limits on all POST endpoints
+- ✅ Per-IP rate limiting for DoS prevention
+- ✅ Security event logging for rate limit violations
 
 ## Changes
 
@@ -492,6 +495,125 @@ ALLOWED_ORIGINS="https://example.com,https://app.example.com" # Whitelist (produ
 
 ---
 
+### 11. Rate Limiting & Enhanced Security Logging - Session 5 🛡️
+
+**Implemented 2 additional MEDIUM priority improvements** to prevent DoS attacks and API abuse:
+
+#### Frontend Service (Go) - Rate Limiting Middleware
+
+**Files**: `src/frontend/middleware.go`, `src/frontend/main.go`
+
+**Implementation**:
+- ✅ **Per-IP rate limiting** using token bucket algorithm (golang.org/x/time/rate)
+- ✅ **Configurable limits** via environment variables:
+  * RATE_LIMIT_RPS: Requests per second (default: 1.67 = 100 req/min)
+  * RATE_LIMIT_BURST: Burst size (default: 20)
+  * DISABLE_RATE_LIMITING: Set to "true" to disable
+- ✅ **Automatic cleanup**: Removes inactive IPs after 3 minutes
+- ✅ **Proxy-aware**: Extracts real IP from X-Forwarded-For, X-Real-IP headers
+- ✅ **429 Response** with helpful headers:
+  * X-RateLimit-Limit: Maximum requests allowed
+  * X-RateLimit-Remaining: Requests remaining
+  * Retry-After: 60 seconds
+- ✅ **Security event logging**: All violations logged with client IP, path, method
+
+**Features**:
+```go
+// Token bucket algorithm with sliding window
+type rateLimiter struct {
+    visitors map[string]*visitor
+    mu       sync.RWMutex
+    rate     rate.Limit // requests per second
+    burst    int        // maximum burst size
+}
+```
+
+**Benefits**:
+- Prevents DoS attacks from single IPs
+- Protects against brute-force attacks
+- Prevents API abuse and scraping
+- Thread-safe with automatic memory cleanup
+- Zero-configuration with sensible defaults
+
+**OWASP**: A05:2021 - Security Misconfiguration (resource limits)
+**CWE**: CWE-770 (Allocation of Resources Without Limits or Throttling)
+
+#### Shopping Assistant Service (Python/Flask) - Rate Limiting
+
+**File**: `src/shoppingassistantservice/shoppingassistantservice.py`
+
+**Implementation**:
+- ✅ **Aggressive rate limiting** for expensive LLM API calls
+- ✅ **Sliding window algorithm** with in-memory tracking
+- ✅ **Configurable limits** via environment variables:
+  * RATE_LIMIT_REQUESTS: Max requests (default: 5)
+  * RATE_LIMIT_WINDOW: Time window in seconds (default: 60)
+  * Result: 5 requests per minute per IP by default
+- ✅ **Thread-safe** implementation with threading.Lock
+- ✅ **Automatic cleanup**: Removes inactive IPs every 5 minutes
+- ✅ **429 Response** with detailed headers:
+  * X-RateLimit-Limit: Maximum requests
+  * X-RateLimit-Remaining: Requests remaining
+  * X-RateLimit-Reset: Unix timestamp when limit resets
+  * Retry-After: Seconds to wait
+- ✅ **Security event logging**: Structured logging with security_event tag
+
+**Benefits**:
+- Protects expensive Gemini LLM API calls (cost control)
+- Prevents abuse of vector similarity search
+- Prevents DoS attacks on expensive endpoints
+- Lower default limit (5/min) appropriate for LLM operations
+- Clients informed of rate limit status via headers
+
+**Cost Control**:
+- Each LLM request can cost $0.001-$0.01
+- Without rate limiting: 1 IP could make 1000s of requests/min
+- With rate limiting: Maximum 5 requests/min per IP = $0.05/min max per IP
+
+**OWASP**: A05:2021 - Security Misconfiguration (resource limits)
+**CWE**: CWE-770, CWE-400 (Uncontrolled Resource Consumption)
+
+**Files Modified (Session 5)**: 3
+- `src/frontend/middleware.go`: +144 lines (rate limiter implementation)
+- `src/frontend/main.go`: +1 line (middleware integration)
+- `src/shoppingassistantservice/shoppingassistantservice.py`: +102 lines (rate limiter + integration)
+
+**Code Changes (Session 5)**: +247 insertions, -0 deletions
+
+#### Session 5 Impact
+
+**Security**:
+- ✅ DoS attack prevention for both services
+- ✅ API abuse prevention with per-IP tracking
+- ✅ Cost control for expensive LLM operations
+
+**Operational Benefits**:
+- ✅ Configurable via environment variables
+- ✅ Can be disabled for testing (DISABLE_RATE_LIMITING=true)
+- ✅ Rate limit headers inform clients
+- ✅ Automatic memory cleanup
+- ✅ Thread-safe for production
+
+**Monitoring & Observability**:
+- ✅ All violations logged as security events
+- ✅ Structured logging: client IP, path, method
+- ✅ Easy SIEM integration with security_event tag
+
+**New Environment Variables**:
+```bash
+# Frontend Service
+RATE_LIMIT_RPS=1.67                   # Requests per second (default: 100/min)
+RATE_LIMIT_BURST=20                   # Burst size (default: 20)
+DISABLE_RATE_LIMITING=true            # Disable for testing (default: false)
+
+# Shopping Assistant Service
+RATE_LIMIT_REQUESTS=5                 # Max requests per window (default: 5)
+RATE_LIMIT_WINDOW=60                  # Time window in seconds (default: 60)
+DISABLE_RATE_LIMITING=true            # Disable for testing (default: false)
+```
+
+---
+
 ## Commits
 
 ### Session 1 (Testing, OpenTelemetry, Initial Security)
@@ -532,7 +654,13 @@ ALLOWED_ORIGINS="https://example.com,https://app.example.com" # Whitelist (produ
 29. `74eac72` - **Add request body size limits to all POST endpoints for DoS prevention** 🔒
 30. `64a0e26` - Update RECENT_IMPROVEMENTS.md with Session 4 security hardening
 31. `db13180` - Update PROJECT_COMPLETION_SUMMARY.md with Session 4 improvements
-32. `[current]` - Update PR_DESCRIPTION.md with Session 4
+32. `cbb5c8e` - Update PR_DESCRIPTION.md with Session 4
+
+### Session 5 (Rate Limiting & Security Logging)
+33. `[to be added]` - **Implement rate limiting for frontend and shopping assistant services** 🛡️
+34. `[to be added]` - Update RECENT_IMPROVEMENTS.md with Session 5
+35. `[to be added]` - Update PROJECT_COMPLETION_SUMMARY.md with Session 5
+36. `[current]` - Update PR_DESCRIPTION.md with Session 5
 
 ## Impact
 
@@ -545,10 +673,10 @@ ALLOWED_ORIGINS="https://example.com,https://app.example.com" # Whitelist (produ
 **Security** 🔒:
 - ✅ **2 Critical** vulnerabilities fixed (SQL Injection × 2)
 - ✅ **13 High** vulnerabilities fixed (SSRF, crashes, validation, deprecated API, security headers × 2, timeouts × 2, graceful shutdown × 2, error sanitization, error handling)
-- ✅ **7 Medium** vulnerabilities fixed (resource leaks, weak RNG, input validation, cookie security × 2, CORS config, body size limits)
-- ✅ **Total: 22 security vulnerabilities** resolved
+- ✅ **9 Medium** vulnerabilities fixed (resource leaks, weak RNG, input validation, cookie security × 2, CORS config, body size limits, rate limiting × 2)
+- ✅ **Total: 24 security vulnerabilities** resolved
 - ✅ Comprehensive SECURITY.md guide (827 lines)
-- ✅ **Production Hardening**: Security headers, timeouts, graceful shutdown, input validation, cookie security, CORS, request limits
+- ✅ **Production Hardening**: Security headers, timeouts, graceful shutdown, input validation, cookie security, CORS, request limits, rate limiting
 
 **Observability**:
 - ✅ Distributed tracing enabled across all services
@@ -588,17 +716,18 @@ OpenTelemetry can be verified by checking service logs for:
 
 ## Files Changed
 
-- **Total Commits**: 29 (Session 1: 10, Session 2: 8, Session 3: 8, Session 4: 4-in-progress)
-- **Modified Files**: 44 unique files
+- **Total Commits**: 33 (Session 1: 10, Session 2: 8, Session 3: 8, Session 4: 4, Session 5: 3-in-progress)
+- **Modified Files**: 47 unique files
 - **Created Files**: 13 files (tests + common libraries + documentation)
-- **Total Lines**: +4,056 insertions, -221 deletions
-- **Net Addition**: +3,835 lines (tests, documentation, production hardening, security improvements)
+- **Total Lines**: +4,303 insertions, -221 deletions
+- **Net Addition**: +4,082 lines (tests, documentation, production hardening, security improvements, rate limiting)
 
 ### Session Breakdown:
 - **Session 1**: +3,352 insertions, -83 deletions (24 files)
 - **Session 2**: +267 insertions, -63 deletions (14 files)
 - **Session 3**: +271 insertions, -42 deletions (4 files)
 - **Session 4**: +166 insertions, -33 deletions (3 files)
+- **Session 5**: +247 insertions, -0 deletions (3 files)
 
 ## Breaking Changes
 
@@ -640,7 +769,7 @@ Please review:
 - [x] All tests passing
 - [x] No breaking changes
 - [x] Commits are properly formatted
-- [x] **Security vulnerabilities fixed (22 total: 2 Critical, 13 High, 7 Medium)**
+- [x] **Security vulnerabilities fixed (24 total: 2 Critical, 13 High, 9 Medium)**
 - [x] **OWASP Top 10 vulnerabilities comprehensively addressed**
 - [x] **Production hardening completed (security headers, timeouts, graceful shutdown)**
 - [x] **Error handling for all external APIs**
@@ -650,3 +779,5 @@ Please review:
 - [x] **Cookie security (HttpOnly, Secure, SameSite) - Session 4**
 - [x] **CORS configuration with origin whitelisting - Session 4**
 - [x] **Request body size limits on all POST endpoints - Session 4**
+- [x] **Rate limiting for DoS prevention - Session 5**
+- [x] **Security event logging for rate limit violations - Session 5**
