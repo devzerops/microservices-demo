@@ -5,6 +5,10 @@ go 1.23
 require (
 	cloud.google.com/go/profiler v0.4.1
 	github.com/sirupsen/logrus v1.9.3
+	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.54.0
+	go.opentelemetry.io/otel v1.29.0
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.29.0
+	go.opentelemetry.io/otel/sdk v1.29.0
 	golang.org/x/net v0.31.0
 	google.golang.org/grpc v1.68.0
 	google.golang.org/protobuf v1.35.2
