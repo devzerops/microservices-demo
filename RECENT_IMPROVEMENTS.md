@@ -143,6 +143,33 @@ DISABLE_RATE_LIMITING=true   # Disable for testing (default: false)
 - `src/shoppingassistantservice/shoppingassistantservice.py`: +102 lines (rate limiter + integration)
 - Total: +247 insertions, -0 deletions
 
+**Test Files (Session 5)**:
+- `src/frontend/middleware_test.go`: 407 lines (comprehensive rate limiting tests)
+  * TestRateLimitMiddleware_AllowsNormalRequests
+  * TestRateLimitMiddleware_BlocksExcessiveRequests
+  * TestRateLimitMiddleware_PerIPLimiting
+  * TestRateLimitMiddleware_CanBeDisabled
+  * TestGetClientIP (X-Forwarded-For, X-Real-IP)
+  * TestRateLimiter_Cleanup
+  * TestRateLimiter_ConfigurableLimits
+  * TestRateLimitMiddleware_WithLogging
+
+- `src/shoppingassistantservice/test_rate_limiting.py`: 373 lines (comprehensive rate limiting tests)
+  * test_allows_requests_within_limit
+  * test_blocks_requests_over_limit
+  * test_per_ip_limiting
+  * test_sliding_window
+  * test_cleanup_removes_old_ips
+  * test_get_client_ip (various header combinations)
+  * test_allows_normal_requests (integration)
+  * test_blocks_excessive_requests (integration)
+  * test_returns_correct_headers
+  * test_health_check_bypasses_rate_limiting
+  * test_options_bypasses_rate_limiting
+  * test_can_disable_rate_limiting
+
+**Total Test Coverage**: +780 lines of rate limiting tests
+
 ---
 
 ## Session 4 - Additional Security Hardening
