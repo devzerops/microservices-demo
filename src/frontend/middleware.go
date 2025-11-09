@@ -17,8 +17,8 @@ package main
 import (
 	"context"
 	"net/http"
-	"time"
 	"os"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
@@ -120,6 +120,24 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// isSecureContext determines if cookies should use the Secure flag
+// Returns true if running in production or over HTTPS
+func isSecureContext(r *http.Request) bool {
+	// Check if explicitly in production environment
+	if os.Getenv("ENV") == "production" {
+		return true
+	}
+	// Check if request is over HTTPS
+	if r.TLS != nil {
+		return true
+	}
+	// Check if behind HTTPS proxy (X-Forwarded-Proto header)
+	if r.Header.Get("X-Forwarded-Proto") == "https" {
+		return true
+	}
+	return false
+}
+
 func ensureSessionID(next http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var sessionID string
@@ -133,9 +151,13 @@ func ensureSessionID(next http.Handler) http.HandlerFunc {
 				sessionID = u.String()
 			}
 			http.SetCookie(w, &http.Cookie{
-				Name:   cookieSessionID,
-				Value:  sessionID,
-				MaxAge: cookieMaxAge,
+				Name:     cookieSessionID,
+				Value:    sessionID,
+				MaxAge:   cookieMaxAge,
+				Path:     "/",
+				HttpOnly: true,               // Prevents JavaScript access (XSS protection)
+				Secure:   isSecureContext(r), // Only transmit over HTTPS in production
+				SameSite: http.SameSiteLax,   // CSRF protection (allows top-level navigation)
 			})
 		} else if err != nil {
 			return

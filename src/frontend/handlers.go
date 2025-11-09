@@ -245,7 +245,7 @@ func (fe *frontendServer) addToCartHandler(w http.ResponseWriter, r *http.Reques
 		renderHTTPError(log, r, w, errors.Wrap(err, "failed to add to cart"), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("location", baseUrl + "/cart")
+	w.Header().Set("location", baseUrl+"/cart")
 	w.WriteHeader(http.StatusFound)
 }
 
@@ -257,7 +257,7 @@ func (fe *frontendServer) emptyCartHandler(w http.ResponseWriter, r *http.Reques
 		renderHTTPError(log, r, w, errors.Wrap(err, "failed to empty cart"), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("location", baseUrl + "/")
+	w.Header().Set("location", baseUrl+"/")
 	w.WriteHeader(http.StatusFound)
 }
 
@@ -454,11 +454,24 @@ func (fe *frontendServer) logoutHandler(w http.ResponseWriter, r *http.Request) 
 	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
 	log.Debug("logging out")
 	for _, c := range r.Cookies() {
-		c.Expires = time.Now().Add(-time.Hour * 24 * 365)
-		c.MaxAge = -1
-		http.SetCookie(w, c)
+		// Create a new cookie with same attributes to properly delete it
+		deleteCookie := &http.Cookie{
+			Name:     c.Name,
+			Value:    "",
+			Path:     "/",
+			MaxAge:   -1,
+			Expires:  time.Now().Add(-time.Hour * 24 * 365),
+			HttpOnly: true, // Match original cookie attributes
+			Secure:   isSecureContext(r),
+			SameSite: http.SameSiteLax,
+		}
+		// Currency cookie should have HttpOnly: false to match original
+		if c.Name == cookieCurrency {
+			deleteCookie.HttpOnly = false
+		}
+		http.SetCookie(w, deleteCookie)
 	}
-	w.Header().Set("Location", baseUrl + "/")
+	w.Header().Set("Location", baseUrl+"/")
 	w.WriteHeader(http.StatusFound)
 }
 
@@ -600,9 +613,13 @@ func (fe *frontendServer) setCurrencyHandler(w http.ResponseWriter, r *http.Requ
 
 	if payload.Currency != "" {
 		http.SetCookie(w, &http.Cookie{
-			Name:   cookieCurrency,
-			Value:  payload.Currency,
-			MaxAge: cookieMaxAge,
+			Name:     cookieCurrency,
+			Value:    payload.Currency,
+			MaxAge:   cookieMaxAge,
+			Path:     "/",
+			HttpOnly: false,              // Allow JavaScript access for currency display
+			Secure:   isSecureContext(r), // Only transmit over HTTPS in production
+			SameSite: http.SameSiteLax,   // CSRF protection
 		})
 	}
 	referer := r.Header.Get("referer")
