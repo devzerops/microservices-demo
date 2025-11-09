@@ -80,7 +80,7 @@ vectorstore = AlloyDBVectorStore.create_sync(
 def create_app():
     app = Flask(__name__)
 
-    # Add security headers to all responses
+    # Add security headers and CORS configuration to all responses
     @app.after_request
     def set_security_headers(response):
         # Prevent clickjacking attacks
@@ -95,7 +95,34 @@ def create_app():
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
         # XSS Protection for older browsers
         response.headers['X-XSS-Protection'] = '1; mode=block'
+
+        # Add CORS headers if ALLOWED_ORIGINS is configured
+        allowed_origins_env = os.environ.get('ALLOWED_ORIGINS', '')
+        origin = request.headers.get('Origin', '')
+
+        if allowed_origins_env and origin:
+            allowed_origins = [o.strip() for o in allowed_origins_env.split(',')]
+
+            # Check if origin is allowed
+            if '*' in allowed_origins or origin in allowed_origins:
+                response.headers['Access-Control-Allow-Origin'] = origin
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
+                response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+                response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+                response.headers['Access-Control-Max-Age'] = '3600'
+        elif allowed_origins_env == '*':
+            # Allow all origins (not recommended for production)
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Max-Age'] = '3600'
+
         return response
+
+    # Handle preflight OPTIONS requests for CORS
+    @app.route("/", methods=['OPTIONS'])
+    def handle_options():
+        return '', 200
 
     @app.route("/", methods=['POST'])
     def talkToGemini():

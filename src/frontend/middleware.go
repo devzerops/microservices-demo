@@ -18,6 +18,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -115,6 +116,55 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 
 		// X-XSS-Protection for older browsers
 		w.Header().Set("X-XSS-Protection", "1; mode=block")
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// corsMiddleware handles Cross-Origin Resource Sharing (CORS) configuration
+// Enables the frontend to be called from different origins (e.g., separate SPA deployments)
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+
+		// Get allowed origins from environment variable (comma-separated list)
+		// Example: ALLOWED_ORIGINS="https://example.com,https://app.example.com"
+		allowedOriginsEnv := os.Getenv("ALLOWED_ORIGINS")
+
+		// If ALLOWED_ORIGINS is set, validate the origin
+		if allowedOriginsEnv != "" && origin != "" {
+			allowed := false
+			allowedOrigins := strings.Split(allowedOriginsEnv, ",")
+
+			for _, allowedOrigin := range allowedOrigins {
+				allowedOrigin = strings.TrimSpace(allowedOrigin)
+				if allowedOrigin == "*" || allowedOrigin == origin {
+					allowed = true
+					break
+				}
+			}
+
+			if allowed {
+				// Set CORS headers for allowed origins
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+				w.Header().Set("Access-Control-Max-Age", "3600") // Cache preflight for 1 hour
+			}
+		} else if allowedOriginsEnv == "*" {
+			// Allow all origins (not recommended for production)
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Max-Age", "3600")
+		}
+
+		// Handle preflight OPTIONS requests
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 
 		next.ServeHTTP(w, r)
 	})
