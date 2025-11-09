@@ -107,7 +107,7 @@ def create_app():
             content=[
                 {
                     "type": "text",
-                    "text": "You are a professional interior designer, give me a detailed decsription of the style of the room in this image",
+                    "text": "You are a professional interior designer, give me a detailed description of the style of the room in this image",
                 },
                 {"type": "image_url", "image_url": image_url},
             ]

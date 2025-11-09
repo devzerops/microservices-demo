@@ -13,22 +13,27 @@
 // limitations under the License.
 
 using System;
+using System.Text.RegularExpressions;
 using Grpc.Core;
 using Npgsql;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
 using Google.Api.Gax.ResourceNames;
 using Google.Cloud.SecretManager.V1;
- 
+
 namespace cartservice.cartstore
 {
     public class AlloyDBCartStore : ICartStore
     {
         private readonly string tableName;
         private readonly string connectionString;
+        private readonly ILogger<AlloyDBCartStore> _logger;
 
-        public AlloyDBCartStore(IConfiguration configuration)
+        public AlloyDBCartStore(IConfiguration configuration, ILogger<AlloyDBCartStore> logger)
         {
+            _logger = logger;
+
             // Create a Cloud Secrets client.
             SecretManagerServiceClient client = SecretManagerServiceClient.Create();
             var projectId = configuration["PROJECT_ID"];
@@ -38,7 +43,7 @@ namespace cartservice.cartstore
             AccessSecretVersionResponse result = client.AccessSecretVersion(secretVersionName);
             // Convert the payload to a string. Payloads are bytes by default.
             string alloyDBPassword = result.Payload.Data.ToStringUtf8().TrimEnd('\r', '\n');
-        
+
             // TODO: Create a separate user for connecting within the application
             // rather than using our superuser
             string alloyDBUser = "postgres";
@@ -56,30 +61,67 @@ namespace cartservice.cartstore
                                databaseName;
 
             tableName = configuration["ALLOYDB_TABLE_NAME"];
+            ValidateTableName(tableName);
+        }
+
+        /// <summary>
+        /// Validates that a table name contains only safe characters to prevent SQL injection.
+        /// Table names cannot be parameterized in SQL, so they must be validated.
+        /// </summary>
+        /// <param name="name">The table name to validate</param>
+        /// <exception cref="ArgumentException">Thrown when table name is invalid</exception>
+        private void ValidateTableName(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                throw new ArgumentException("Table name cannot be null or empty");
+            }
+
+            // Allow only alphanumeric characters and underscores, must start with letter or underscore
+            var validTableName = new Regex(@"^[a-zA-Z_][a-zA-Z0-9_]*$");
+            if (!validTableName.IsMatch(name))
+            {
+                throw new ArgumentException(
+                    "Invalid table name: must contain only letters, numbers, and underscores, and start with a letter or underscore");
+            }
+
+            if (name.Length > 63)
+            {
+                throw new ArgumentException("Table name too long: maximum 63 characters");
+            }
         }
 
 
         public async Task AddItemAsync(string userId, string productId, int quantity)
         {
-            Console.WriteLine($"AddItemAsync for {userId} called");
+            _logger.LogInformation("AddItemAsync called for userId={UserId}", userId);
             try
             {
                 await using var dataSource = NpgsqlDataSource.Create(connectionString);
 
                 // Fetch the current quantity for our userId/productId tuple
-                var fetchCmd = $"SELECT quantity FROM {tableName} WHERE userID='{userId}' AND productID='{productId}'";
+                // Use parameterized query to prevent SQL injection
+                var fetchQuery = $"SELECT quantity FROM {tableName} WHERE userID = $1 AND productID = $2";
                 var currentQuantity = 0;
-                var cmdRead = dataSource.CreateCommand(fetchCmd);
-                await using (var reader = await cmdRead.ExecuteReaderAsync())
+                await using (var cmdRead = dataSource.CreateCommand(fetchQuery))
                 {
-                    while (await reader.ReadAsync())
-                        currentQuantity += reader.GetInt32(0);
+                    cmdRead.Parameters.AddWithValue(userId);
+                    cmdRead.Parameters.AddWithValue(productId);
+                    await using (var reader = await cmdRead.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                            currentQuantity += reader.GetInt32(0);
+                    }
                 }
                 var totalQuantity = quantity + currentQuantity;
 
-                var insertCmd = $"INSERT INTO {tableName} (userId, productId, quantity) VALUES ('{userId}', '{productId}', {totalQuantity})";
-                await using (var cmdInsert = dataSource.CreateCommand(insertCmd))
+                // Use parameterized query to prevent SQL injection
+                var insertQuery = $"INSERT INTO {tableName} (userId, productId, quantity) VALUES ($1, $2, $3)";
+                await using (var cmdInsert = dataSource.CreateCommand(insertQuery))
                 {
+                    cmdInsert.Parameters.AddWithValue(userId);
+                    cmdInsert.Parameters.AddWithValue(productId);
+                    cmdInsert.Parameters.AddWithValue(totalQuantity);
                     await Task.Run(() =>
                     {
                         return cmdInsert.ExecuteNonQueryAsync();
@@ -96,25 +138,29 @@ namespace cartservice.cartstore
 
         public async Task<Hipstershop.Cart> GetCartAsync(string userId)
         {
-            Console.WriteLine($"GetCartAsync called for userId={userId}");
+            _logger.LogInformation("GetCartAsync called for userId={UserId}", userId);
             Hipstershop.Cart cart = new();
             cart.UserId = userId;
             try
             {
                 await using var dataSource = NpgsqlDataSource.Create(connectionString);
 
-                var cartFetchCmd = $"SELECT productId, quantity FROM {tableName} WHERE userId = '{userId}'";
-                var cmd = dataSource.CreateCommand(cartFetchCmd);
-                await using (var reader = await cmd.ExecuteReaderAsync())
+                // Use parameterized query to prevent SQL injection
+                var cartFetchQuery = $"SELECT productId, quantity FROM {tableName} WHERE userId = $1";
+                await using (var cmd = dataSource.CreateCommand(cartFetchQuery))
                 {
-                    while (await reader.ReadAsync())
+                    cmd.Parameters.AddWithValue(userId);
+                    await using (var reader = await cmd.ExecuteReaderAsync())
                     {
-                        Hipstershop.CartItem item = new()
+                        while (await reader.ReadAsync())
                         {
-                            ProductId = reader.GetString(0),
-                            Quantity = reader.GetInt32(1)
-                        };
-                        cart.Items.Add(item);
+                            Hipstershop.CartItem item = new()
+                            {
+                                ProductId = reader.GetString(0),
+                                Quantity = reader.GetInt32(1)
+                            };
+                            cart.Items.Add(item);
+                        }
                     }
                 }
                 await Task.Run(() =>
@@ -133,14 +179,16 @@ namespace cartservice.cartstore
 
         public async Task EmptyCartAsync(string userId)
         {
-            Console.WriteLine($"EmptyCartAsync called for userId={userId}");
+            _logger.LogInformation("EmptyCartAsync called for userId={UserId}", userId);
 
             try
             {
                 await using var dataSource = NpgsqlDataSource.Create(connectionString);
-                var deleteCmd = $"DELETE FROM {tableName} WHERE userID = '{userId}'";
-                await using (var cmd = dataSource.CreateCommand(deleteCmd))
+                // Use parameterized query to prevent SQL injection
+                var deleteQuery = $"DELETE FROM {tableName} WHERE userID = $1";
+                await using (var cmd = dataSource.CreateCommand(deleteQuery))
                 {
+                    cmd.Parameters.AddWithValue(userId);
                     await Task.Run(() =>
                     {
                         return cmd.ExecuteNonQueryAsync();

@@ -44,7 +44,7 @@ class HipsterShopServer {
       const response = charge(call.request);
       callback(null, response);
     } catch (err) {
-      console.warn(err);
+      logger.error('Payment service error', { error: err });
       callback(err);
     }
   }

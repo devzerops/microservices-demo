@@ -101,7 +101,7 @@ func (fe *frontendServer) homeHandler(w http.ResponseWriter, r *http.Request) {
 	var env = os.Getenv("ENV_PLATFORM")
 	// Only override from env variable if set + valid env
 	if env == "" || stringinSlice(validEnvs, env) == false {
-		fmt.Println("env platform is either empty or invalid")
+		log.Debug("env platform is either empty or invalid, defaulting to local")
 		env = "local"
 	}
 	// Autodetect GCP
@@ -199,7 +199,7 @@ func (fe *frontendServer) productHandler(w http.ResponseWriter, r *http.Request)
 	if isPackagingServiceConfigured() {
 		packagingInfo, err = httpGetPackagingInfo(id)
 		if err != nil {
-			fmt.Println("Failed to obtain product's packaging info:", err)
+			log.WithField("error", err).Warn("Failed to obtain product's packaging info")
 		}
 	}
 
@@ -462,19 +462,25 @@ func (fe *frontendServer) logoutHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (fe *frontendServer) getProductByID(w http.ResponseWriter, r *http.Request) {
+	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
 	id := mux.Vars(r)["ids"]
 	if id == "" {
+		log.Error("Product ID is empty")
+		http.Error(w, "Product ID is required", http.StatusBadRequest)
 		return
 	}
 
 	p, err := fe.getProduct(r.Context(), id)
 	if err != nil {
+		log.WithField("error", err).WithField("id", id).Error("Failed to retrieve product")
+		http.Error(w, "Product not found", http.StatusNotFound)
 		return
 	}
 
 	jsonData, err := json.Marshal(p)
 	if err != nil {
-		fmt.Println(err)
+		log.WithField("error", err).Error("Failed to marshal product to JSON")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
@@ -521,8 +527,7 @@ func (fe *frontendServer) chatBotHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	fmt.Printf("%+v\n", body)
-	fmt.Printf("%+v\n", res)
+	log.WithField("body", string(body)).WithField("status", res.Status).Debug("Received response from shopping assistant service")
 
 	err = json.Unmarshal(body, &response)
 	if err != nil {

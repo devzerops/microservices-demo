@@ -16,6 +16,7 @@ using System;
 using System.Threading.Tasks;
 using Grpc.Core;
 using Grpc.Health.V1;
+using Microsoft.Extensions.Logging;
 using static Grpc.Health.V1.Health;
 using cartservice.cartstore;
 
@@ -24,15 +25,17 @@ namespace cartservice.services
     internal class HealthCheckService : HealthBase
     {
         private ICartStore _cartStore { get; }
+        private readonly ILogger<HealthCheckService> _logger;
 
-        public HealthCheckService (ICartStore cartStore) 
+        public HealthCheckService (ICartStore cartStore, ILogger<HealthCheckService> logger)
         {
             _cartStore = cartStore;
+            _logger = logger;
         }
 
         public override Task<HealthCheckResponse> Check(HealthCheckRequest request, ServerCallContext context)
         {
-            Console.WriteLine ("Checking CartService Health");
+            _logger.LogInformation("Checking CartService Health");
             return Task.FromResult(new HealthCheckResponse {
                 Status = _cartStore.Ping() ? HealthCheckResponse.Types.ServingStatus.Serving : HealthCheckResponse.Types.ServingStatus.NotServing
             });

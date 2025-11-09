@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using cartservice.cartstore;
 using cartservice.services;
 using Microsoft.Extensions.Caching.StackExchangeRedis;
@@ -26,10 +27,17 @@ namespace cartservice
         // For more information on how to configure your application, visit https://go.microsoft.com/fwlink/?LinkID=398940
         public void ConfigureServices(IServiceCollection services)
         {
+            // Add logging early so we can use it during configuration
+            services.AddLogging();
+
             string redisAddress = Configuration["REDIS_ADDR"];
             string spannerProjectId = Configuration["SPANNER_PROJECT"];
             string spannerConnectionString = Configuration["SPANNER_CONNECTION_STRING"];
             string alloyDBConnectionString = Configuration["ALLOYDB_PRIMARY_IP"];
+
+            // Build a temporary service provider to get a logger for configuration logging
+            using var tempProvider = services.BuildServiceProvider();
+            var logger = tempProvider.GetRequiredService<ILogger<Startup>>();
 
             if (!string.IsNullOrEmpty(redisAddress))
             {
@@ -45,12 +53,12 @@ namespace cartservice
             }
             else if (!string.IsNullOrEmpty(alloyDBConnectionString))
             {
-                Console.WriteLine("Creating AlloyDB cart store");
+                logger.LogInformation("Creating AlloyDB cart store");
                 services.AddSingleton<ICartStore, AlloyDBCartStore>();
             }
             else
             {
-                Console.WriteLine("Redis cache host(hostname+port) was not specified. Starting a cart service using in memory store");
+                logger.LogInformation("Redis cache host(hostname+port) was not specified. Starting a cart service using in memory store");
                 services.AddDistributedMemoryCache();
                 services.AddSingleton<ICartStore, RedisCartStore>();
             }

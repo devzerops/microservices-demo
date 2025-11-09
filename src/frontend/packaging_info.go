@@ -23,6 +23,8 @@ import (
 	"os"
 	"regexp"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 /*
@@ -100,7 +102,7 @@ func httpGetPackagingInfo(productId string) (*PackagingInfo, error) {
 		return nil, fmt.Errorf("URL host mismatch: potential SSRF attack")
 	}
 
-	fmt.Println("Requesting packaging info from URL: ", fullURL)
+	logrus.WithField("url", fullURL).Debug("Requesting packaging info from URL")
 
 	// Use HTTP client with timeout
 	resp, err := packagingHTTPClient.Get(fullURL)

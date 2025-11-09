@@ -17,6 +17,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Grpc.Core;
 using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Logging;
 using Google.Protobuf;
 
 namespace cartservice.cartstore
@@ -24,15 +25,18 @@ namespace cartservice.cartstore
     public class RedisCartStore : ICartStore
     {
         private readonly IDistributedCache _cache;
+        private readonly ILogger<RedisCartStore> _logger;
 
-        public RedisCartStore(IDistributedCache cache)
+        public RedisCartStore(IDistributedCache cache, ILogger<RedisCartStore> logger)
         {
             _cache = cache;
+            _logger = logger;
         }
 
         public async Task AddItemAsync(string userId, string productId, int quantity)
         {
-            Console.WriteLine($"AddItemAsync called with userId={userId}, productId={productId}, quantity={quantity}");
+            _logger.LogInformation("AddItemAsync called with userId={UserId}, productId={ProductId}, quantity={Quantity}",
+                userId, productId, quantity);
 
             try
             {
@@ -67,7 +71,7 @@ namespace cartservice.cartstore
 
         public async Task EmptyCartAsync(string userId)
         {
-            Console.WriteLine($"EmptyCartAsync called with userId={userId}");
+            _logger.LogInformation("EmptyCartAsync called with userId={UserId}", userId);
 
             try
             {
@@ -82,7 +86,7 @@ namespace cartservice.cartstore
 
         public async Task<Hipstershop.Cart> GetCartAsync(string userId)
         {
-            Console.WriteLine($"GetCartAsync called with userId={userId}");
+            _logger.LogInformation("GetCartAsync called with userId={UserId}", userId);
 
             try
             {
