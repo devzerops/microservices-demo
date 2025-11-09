@@ -15,6 +15,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -496,24 +497,68 @@ func (fe *frontendServer) chatBotHandler(w http.ResponseWriter, r *http.Request)
 		Message string `json:"message"`
 	}
 
+	type ChatBotRequest struct {
+		Message string `json:"message"`
+		Image   string `json:"image"`
+	}
+
 	type LLMResponse struct {
 		Content string         `json:"content"`
 		Details map[string]any `json:"details"`
 	}
 
+	// Limit request body size to prevent DoS attacks (1MB max)
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
+	// Read and validate request body
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		if err.Error() == "http: request body too large" {
+			renderHTTPError(log, r, w, errors.New("request body too large (max 1MB)"), http.StatusRequestEntityTooLarge)
+		} else {
+			renderHTTPError(log, r, w, errors.Wrap(err, "failed to read request body"), http.StatusBadRequest)
+		}
+		return
+	}
+
+	// Validate JSON structure
+	var req ChatBotRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "invalid JSON format"), http.StatusBadRequest)
+		return
+	}
+
+	// Validate required fields and lengths
+	if req.Message == "" {
+		renderHTTPError(log, r, w, errors.New("message field is required"), http.StatusBadRequest)
+		return
+	}
+	if len(req.Message) > 1000 {
+		renderHTTPError(log, r, w, errors.New("message too long (max 1000 characters)"), http.StatusBadRequest)
+		return
+	}
+	if req.Image == "" {
+		renderHTTPError(log, r, w, errors.New("image field is required"), http.StatusBadRequest)
+		return
+	}
+	if len(req.Image) > 2048 {
+		renderHTTPError(log, r, w, errors.New("image URL too long (max 2048 characters)"), http.StatusBadRequest)
+		return
+	}
+
 	var response LLMResponse
 
 	url := "http://" + fe.shoppingAssistantSvcAddr
-	req, err := http.NewRequest(http.MethodPost, url, r.Body)
+	httpReq, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		renderHTTPError(log, r, w, errors.Wrap(err, "failed to create request"), http.StatusInternalServerError)
 		return
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
 
 	// Use HTTP client with timeout to prevent resource exhaustion
-	res, err := httpClientWithTimeout.Do(req)
+	res, err := httpClientWithTimeout.Do(httpReq)
 	if err != nil {
 		renderHTTPError(log, r, w, errors.Wrap(err, "failed to send request"), http.StatusInternalServerError)
 		return
@@ -521,15 +566,15 @@ func (fe *frontendServer) chatBotHandler(w http.ResponseWriter, r *http.Request)
 	// Ensure response body is closed to prevent resource leak
 	defer res.Body.Close()
 
-	body, err := io.ReadAll(res.Body)
+	responseBody, err := io.ReadAll(res.Body)
 	if err != nil {
 		renderHTTPError(log, r, w, errors.Wrap(err, "failed to read response"), http.StatusInternalServerError)
 		return
 	}
 
-	log.WithField("body", string(body)).WithField("status", res.Status).Debug("Received response from shopping assistant service")
+	log.WithField("body", string(responseBody)).WithField("status", res.Status).Debug("Received response from shopping assistant service")
 
-	err = json.Unmarshal(body, &response)
+	err = json.Unmarshal(responseBody, &response)
 	if err != nil {
 		renderHTTPError(log, r, w, errors.Wrap(err, "failed to unmarshal body"), http.StatusInternalServerError)
 		return
