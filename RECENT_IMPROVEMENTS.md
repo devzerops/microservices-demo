@@ -2,7 +2,28 @@
 
 This document summarizes the recent improvements made to the microservices-demo project.
 
-## Latest Updates (Session 2 - Part 2)
+## Latest Updates (Session 2 - Part 3)
+
+### AI/ML Configuration Flexibility
+
+**1 additional configuration issue** resolved:
+
+**LLM Model Configuration**:
+- ✅ **Configurable AI Models** - shoppingassistantservice
+  * Environment variable `LLM_MODEL` (default: gemini-1.5-flash)
+  * Environment variable `EMBEDDING_MODEL` (default: models/embedding-001)
+  * Enables model version updates without code changes
+  * Supports A/B testing and cost optimization
+
+**Total Issues**: 1
+**Files Modified**: 1
+**Code Changes**: +7 insertions, -3 deletions
+
+See commit `0b4f310` for full details.
+
+---
+
+## Session 2 - Part 2
 
 ### Configuration Flexibility and Production Readiness
 
