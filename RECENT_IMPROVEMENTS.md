@@ -2,7 +2,150 @@
 
 This document summarizes the recent improvements made to the microservices-demo project.
 
-## Latest Updates (Session 4 - Additional Security Hardening)
+## Latest Updates (Session 5 - Rate Limiting & Enhanced Security Logging)
+
+### Per-IP Rate Limiting for DoS Prevention
+
+**2 MEDIUM priority improvements** implemented to prevent API abuse and DoS attacks:
+
+#### Frontend Service (Go) - Rate Limiting Middleware
+
+**File**: `src/frontend/middleware.go`, `src/frontend/main.go`
+
+**Implementation**:
+- ✅ **Per-IP rate limiting** using token bucket algorithm (golang.org/x/time/rate)
+- ✅ **Configurable limits** via environment variables:
+  * `RATE_LIMIT_RPS`: Requests per second (default: 1.67 = 100 req/min)
+  * `RATE_LIMIT_BURST`: Burst size (default: 20)
+  * `DISABLE_RATE_LIMITING`: Set to "true" to disable (for testing)
+- ✅ **Automatic cleanup**: Removes inactive IPs after 3 minutes
+- ✅ **Proxy-aware**: Extracts real IP from X-Forwarded-For and X-Real-IP headers
+- ✅ **429 Response**: Returns "Too Many Requests" with helpful headers:
+  * X-RateLimit-Limit: Maximum requests allowed
+  * X-RateLimit-Remaining: Requests remaining
+  * Retry-After: Seconds until rate limit resets
+- ✅ **Security event logging**: Logs all rate limit violations with:
+  * Client IP address
+  * Request path and method
+  * `security_event: rate_limit_exceeded` tag for monitoring
+
+**Features**:
+```go
+// Token bucket algorithm with sliding window
+type rateLimiter struct {
+    visitors map[string]*visitor
+    mu       sync.RWMutex
+    rate     rate.Limit // requests per second
+    burst    int        // maximum burst size
+}
+
+// Middleware integration
+handler = rateLimitMiddleware(handler)  // Applied before session handling
+```
+
+**Benefits**:
+- Prevents DoS attacks from single IPs
+- Protects against brute-force attacks
+- Prevents API abuse
+- Configurable per environment (dev/staging/prod)
+- Zero-configuration with sensible defaults
+- Thread-safe with automatic memory cleanup
+
+**OWASP**: A05:2021 - Security Misconfiguration (resource limits)
+**CWE**: CWE-770 (Allocation of Resources Without Limits or Throttling)
+
+#### Shopping Assistant Service (Python/Flask) - Rate Limiting
+
+**File**: `src/shoppingassistantservice/shoppingassistantservice.py`
+
+**Implementation**:
+- ✅ **Aggressive rate limiting** for expensive LLM API calls
+- ✅ **Sliding window algorithm** with in-memory tracking
+- ✅ **Configurable limits** via environment variables:
+  * `RATE_LIMIT_REQUESTS`: Max requests (default: 5)
+  * `RATE_LIMIT_WINDOW`: Time window in seconds (default: 60)
+  * Result: 5 requests per minute per IP by default
+- ✅ **Thread-safe** implementation with threading.Lock
+- ✅ **Automatic cleanup**: Removes inactive IPs every 5 minutes
+- ✅ **Proxy-aware**: Handles X-Forwarded-For and X-Real-IP headers
+- ✅ **429 Response** with rate limit headers:
+  * X-RateLimit-Limit: Maximum requests allowed
+  * X-RateLimit-Remaining: Requests remaining
+  * X-RateLimit-Reset: Unix timestamp when limit resets
+  * Retry-After: Seconds to wait
+- ✅ **Security event logging**: Structured logging with:
+  * Client IP, path, method
+  * `security_event: rate_limit_exceeded` tag
+
+**Features**:
+```python
+class RateLimiter:
+    """
+    Simple in-memory rate limiter using sliding window algorithm.
+    Tracks request timestamps per IP address.
+    """
+    def is_allowed(self, ip_address: str) -> Tuple[bool, int]:
+        # Returns (allowed, remaining_requests)
+```
+
+**Benefits**:
+- Protects expensive LLM API calls (cost control)
+- Prevents abuse of Gemini API
+- Prevents DoS attacks
+- Lower default limit (5/min) appropriate for expensive operations
+- Informational headers on all responses
+- Skip health checks and OPTIONS requests
+
+**OWASP**: A05:2021 - Security Misconfiguration (resource limits)
+**CWE**: CWE-770, CWE-400 (Uncontrolled Resource Consumption)
+
+### Session 5 Impact Summary
+
+**Security Improvements**:
+- ✅ DoS attack prevention with per-IP rate limiting
+- ✅ API abuse prevention with configurable limits
+- ✅ Cost control for expensive LLM operations
+- ✅ Comprehensive security event logging
+
+**Operational Benefits**:
+- ✅ Configurable via environment variables (no code changes)
+- ✅ Disabled by default for development (set DISABLE_RATE_LIMITING=true)
+- ✅ Rate limit headers inform clients of their status
+- ✅ Automatic memory cleanup prevents resource leaks
+- ✅ Thread-safe implementation for production workloads
+
+**Monitoring & Observability**:
+- ✅ All rate limit violations logged as security events
+- ✅ Structured logging with client IP, path, method
+- ✅ Easy integration with SIEM systems
+- ✅ `security_event` tag enables filtering and alerting
+
+### Environment Variables (Session 5)
+
+**Frontend Service**:
+```bash
+RATE_LIMIT_RPS=1.67          # Requests per second (default: 100/min)
+RATE_LIMIT_BURST=20          # Burst size (default: 20)
+DISABLE_RATE_LIMITING=true   # Disable for testing (default: false)
+```
+
+**Shopping Assistant Service**:
+```bash
+RATE_LIMIT_REQUESTS=5        # Max requests per window (default: 5)
+RATE_LIMIT_WINDOW=60         # Time window in seconds (default: 60)
+DISABLE_RATE_LIMITING=true   # Disable for testing (default: false)
+```
+
+**Code Changes (Session 5)**:
+- Modified Files: 3
+- `src/frontend/middleware.go`: +144 lines (rate limiter implementation)
+- `src/frontend/main.go`: +1 line (middleware integration)
+- `src/shoppingassistantservice/shoppingassistantservice.py`: +102 lines (rate limiter + integration)
+- Total: +247 insertions, -0 deletions
+
+---
+
+## Session 4 - Additional Security Hardening
 
 ### Cookie Security, CORS, and Request Size Limits
 
