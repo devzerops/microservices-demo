@@ -2,7 +2,40 @@
 
 This document summarizes the recent improvements made to the microservices-demo project.
 
-## Latest Updates (Session 2)
+## Latest Updates (Session 2 - Part 2)
+
+### Configuration Flexibility and Production Readiness
+
+**10 additional medium/low priority issues** resolved for better production deployment:
+
+**Configuration Improvements (5)**:
+- ✅ **Configurable Log Levels** - checkoutservice, shippingservice
+  * Environment variable `LOG_LEVEL` (default: info)
+  * Changed from hardcoded DebugLevel
+- ✅ **Configurable Port** - shoppingassistantservice
+  * Environment variable `PORT` (default: 8080)
+- ✅ **Configurable Database User** - productcatalogservice
+  * Environment variable `ALLOYDB_USER` (default: postgres)
+  * Supports least privilege access pattern
+
+**Health Check Improvements (2)**:
+- ✅ **Improved Ping Methods** - AlloyDBCartStore, SpannerCartStore
+  * Now actually test database connectivity
+  * Previously always returned true
+
+**Code Quality (1)**:
+- ✅ **Fixed Inefficient Condition** - frontend/handlers.go
+  * Fixed always-true condition `len(addrs) >= 0` → `len(addrs) > 0`
+
+**Total Additional Issues**: 10
+**Files Modified**: 7
+**Code Changes**: +49 insertions, -9 deletions
+
+See commit `6cb7d61` for full details.
+
+---
+
+## Session 2 - Part 1
 
 ### Additional Security and Code Quality Improvements
 
@@ -23,7 +56,7 @@ Following comprehensive code analysis, **23 additional issues** were identified 
 - Improved error handling in frontend API endpoints
 - Better HTTP status codes and error responses
 
-**Total Issues Resolved This Session**: 23
+**Total Issues Resolved**: 23
 **Files Modified**: 11
 **Code Changes**: +124 insertions, -48 deletions
 
