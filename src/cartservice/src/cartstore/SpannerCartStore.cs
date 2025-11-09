@@ -177,10 +177,15 @@ namespace cartservice.cartstore
         {
             try
             {
-                return true;
+                using SpannerConnection connection = new(databaseString);
+                connection.Open();
+                using var cmd = connection.CreateSelectCommand("SELECT 1");
+                var result = cmd.ExecuteScalar();
+                return result != null;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogWarning("Ping failed: {Error}", ex.Message);
                 return false;
             }
         }

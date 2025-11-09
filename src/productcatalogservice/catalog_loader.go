@@ -136,9 +136,15 @@ func loadCatalogFromAlloyDB(catalog *pb.ListProductsResponse) error {
 	cleanup := func() error { return dialer.Close() }
 	defer cleanup()
 
+	// Get database user from environment variable, default to postgres
+	pgUser := os.Getenv("ALLOYDB_USER")
+	if pgUser == "" {
+		pgUser = "postgres"
+	}
+
 	dsn := fmt.Sprintf(
 		"user=%s password=%s dbname=%s sslmode=disable",
-		"postgres", pgPassword, pgDatabaseName,
+		pgUser, pgPassword, pgDatabaseName,
 	)
 
 	config, err := pgxpool.ParseConfig(dsn)

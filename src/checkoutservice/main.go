@@ -50,7 +50,19 @@ var log *logrus.Logger
 
 func init() {
 	log = logrus.New()
-	log.Level = logrus.DebugLevel
+
+	// Set log level from environment variable (default: info)
+	logLevel := os.Getenv("LOG_LEVEL")
+	if logLevel == "" {
+		logLevel = "info"
+	}
+	level, err := logrus.ParseLevel(logLevel)
+	if err != nil {
+		log.Warnf("Invalid LOG_LEVEL '%s', defaulting to info", logLevel)
+		level = logrus.InfoLevel
+	}
+	log.Level = level
+
 	log.Formatter = &logrus.JSONFormatter{
 		FieldMap: logrus.FieldMap{
 			logrus.FieldKeyTime:  "timestamp",

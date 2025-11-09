@@ -206,10 +206,14 @@ namespace cartservice.cartstore
         {
             try
             {
-                return true;
+                using var dataSource = NpgsqlDataSource.Create(connectionString);
+                using var connection = dataSource.CreateConnection();
+                connection.Open();
+                return connection.State == System.Data.ConnectionState.Open;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogWarning("Ping failed: {Error}", ex.Message);
                 return false;
             }
         }
