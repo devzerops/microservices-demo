@@ -1,10 +1,16 @@
 # Search Service with Autocomplete & Trending
 
-Real-time search autocomplete service with trending queries tracking and fuzzy matching.
+Real-time search autocomplete service with trending queries tracking, fuzzy matching, and advanced product search.
 
 ## Features
 
 - 🔍 **Fast Autocomplete**: Trie-based prefix matching with sub-5ms response time
+- 🔎 **Advanced Product Search**: Multi-criteria search with filters and sorting
+- 💰 **Price Range Filtering**: Search within specific price ranges
+- ⭐ **Rating Filtering**: Filter by minimum rating threshold
+- 🏷️ **Category Filtering**: Filter by product categories
+- 📦 **Stock Filtering**: Filter in-stock products only
+- 🔢 **Pagination**: Efficient handling of large result sets
 - 📈 **Trending Queries**: Real-time tracking of popular searches
 - 🎯 **Fuzzy Matching**: Levenshtein distance-based typo correction
 - 📊 **Search History**: User-specific search history tracking
@@ -15,30 +21,120 @@ Real-time search autocomplete service with trending queries tracking and fuzzy m
 
 ### Core Components
 
-**1. Trie (Prefix Tree)**
+**1. Product Index**
+- Advanced product search engine
+- Multi-field relevance scoring (name, description, category)
+- Multiple match types (exact, prefix, partial, fuzzy)
+- Comprehensive filtering (price, rating, category, stock)
+- Multiple sorting options (relevance, price, rating, popularity, newest)
+- Efficient pagination support
+- Thread-safe concurrent operations with read-write locks
+
+**2. Trie (Prefix Tree)**
 - O(k) search complexity where k = query length
 - Automatic prefix matching
 - Weighted scoring based on popularity
 - Category-based organization
 
-**2. Trending Tracker**
+**3. Trending Tracker**
 - Time-windowed query tracking
 - Velocity calculation (searches per minute)
 - Rank change detection
 - Automatic cleanup of old data
 
-**3. Fuzzy Matcher**
+**4. Fuzzy Matcher**
 - Levenshtein distance algorithm
 - Typo tolerance (up to 3 character edits)
 - Fallback suggestions when no exact matches
 
-**4. Search History**
+**5. Search History**
 - Per-user history tracking
 - Chronological ordering
 - Duplicate detection
 - Configurable retention
 
 ## API Endpoints
+
+### Advanced Product Search
+
+**GET** `/search?q=<query>&filters...`
+
+Comprehensive product search with filtering, sorting, and pagination.
+
+```bash
+# Basic search
+curl "http://localhost:8097/search?q=sunglasses"
+
+# Search with price range
+curl "http://localhost:8097/search?q=watch&min_price=20&max_price=100"
+
+# Search with category and rating filter
+curl "http://localhost:8097/search?q=&categories=accessories&min_rating=4.5"
+
+# Search with sorting and pagination
+curl "http://localhost:8097/search?q=mug&sort_by=price_asc&page=1&page_size=10"
+
+# Combined filters
+curl "http://localhost:8097/search?q=&categories=home&min_price=10&max_price=30&in_stock_only=true&sort_by=rating"
+```
+
+Response:
+```json
+{
+  "query": "sunglasses",
+  "results": [
+    {
+      "product": {
+        "id": "OLJCESPC7Z",
+        "name": "Sunglasses",
+        "description": "Vintage sunglasses with UV protection",
+        "category": "accessories",
+        "price": 19.99,
+        "rating": 4.5,
+        "review_count": 156,
+        "in_stock": true,
+        "created_at": "2024-08-09T12:00:00Z",
+        "popularity": 250
+      },
+      "score": 100.0,
+      "relevance": 100.0,
+      "match_type": "exact"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "page_size": 20,
+  "total_pages": 1,
+  "filters": {
+    "sort_by": "relevance",
+    "page": 1,
+    "page_size": 20
+  },
+  "took_ms": 5
+}
+```
+
+**Query Parameters**:
+- `q` (optional): Search query (returns all products if empty)
+- `categories` (optional): Filter by category (e.g., "accessories", "clothing", "home", "shoes")
+- `min_price` (optional): Minimum price filter
+- `max_price` (optional): Maximum price filter
+- `min_rating` (optional): Minimum rating filter (1.0-5.0)
+- `in_stock_only` (optional): Filter only in-stock products (true/false)
+- `sort_by` (optional): Sort order - `relevance` (default), `price_asc`, `price_desc`, `rating`, `popularity`, `newest`
+- `page` (optional): Page number (default: 1)
+- `page_size` (optional): Results per page (default: 20, max: 100)
+- `user_id` (optional): User ID for analytics tracking
+
+**Match Types**:
+- `exact`: Exact name match (score: 100)
+- `prefix`: Name starts with query (score: 90)
+- `partial`: Name contains query (score: 80)
+- `category`: Category matches query (score: 70)
+- `description`: Description contains query (score: 60)
+- `word`: Any word in name starts with query (score: 50)
+- `fuzzy`: Fuzzy match using Levenshtein distance (score: calculated)
+- `all`: Empty query returns all products (score: 50)
 
 ### Autocomplete
 
@@ -263,6 +359,85 @@ Environment variables:
 4. **Weighted Scoring**: Popularity-based ranking
 
 ## Usage Examples
+
+### Advanced Search Integration
+
+```javascript
+// Advanced product search with filters
+class ProductSearch {
+  constructor() {
+    this.searchInput = document.getElementById('search-input');
+    this.resultsContainer = document.getElementById('results');
+    this.filtersForm = document.getElementById('filters-form');
+
+    this.searchInput.addEventListener('input', this.handleSearch.bind(this));
+    this.filtersForm.addEventListener('change', this.handleSearch.bind(this));
+  }
+
+  async handleSearch() {
+    const query = this.searchInput.value;
+    const filters = this.getFilters();
+
+    const url = new URL('http://localhost:8097/search');
+    url.searchParams.append('q', query);
+
+    if (filters.category) url.searchParams.append('categories', filters.category);
+    if (filters.minPrice) url.searchParams.append('min_price', filters.minPrice);
+    if (filters.maxPrice) url.searchParams.append('max_price', filters.maxPrice);
+    if (filters.minRating) url.searchParams.append('min_rating', filters.minRating);
+    if (filters.inStockOnly) url.searchParams.append('in_stock_only', 'true');
+    if (filters.sortBy) url.searchParams.append('sort_by', filters.sortBy);
+    url.searchParams.append('page', filters.page || 1);
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    this.displayResults(data);
+  }
+
+  getFilters() {
+    return {
+      category: document.getElementById('category-filter').value,
+      minPrice: document.getElementById('min-price').value,
+      maxPrice: document.getElementById('max-price').value,
+      minRating: document.getElementById('min-rating').value,
+      inStockOnly: document.getElementById('in-stock-only').checked,
+      sortBy: document.getElementById('sort-by').value,
+      page: 1
+    };
+  }
+
+  displayResults(data) {
+    const html = `
+      <div class="search-stats">
+        Found ${data.total} results in ${data.took_ms}ms
+      </div>
+      <div class="results-grid">
+        ${data.results.map(result => `
+          <div class="product-card">
+            <h3>${result.product.name}</h3>
+            <p class="category">${result.product.category}</p>
+            <p class="price">$${result.product.price.toFixed(2)}</p>
+            <div class="rating">⭐ ${result.product.rating}</div>
+            <div class="match-info">
+              Match: ${result.match_type} (${result.score.toFixed(0)})
+            </div>
+            ${!result.product.in_stock ? '<span class="out-of-stock">Out of Stock</span>' : ''}
+          </div>
+        `).join('')}
+      </div>
+      <div class="pagination">
+        Page ${data.page} of ${data.total_pages}
+      </div>
+    `;
+
+    this.resultsContainer.innerHTML = html;
+  }
+}
+
+// Initialize
+new ProductSearch();
+```
 
 ### Frontend Integration
 

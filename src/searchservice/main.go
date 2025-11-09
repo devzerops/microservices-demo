@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 
 var (
 	searchEngine *SearchEngine
+	productIndex *ProductIndex
 	upgrader     = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
 			return true // Allow all origins for demo
@@ -318,6 +320,112 @@ func statsHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Advanced search handler with filters and sorting
+func searchHandler(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+
+	query := r.URL.Query().Get("q")
+	userID := r.URL.Query().Get("user_id")
+
+	// Parse filters
+	filters := SearchFilters{
+		SortBy:   r.URL.Query().Get("sort_by"),
+		Page:     1,
+		PageSize: 20,
+	}
+
+	// Parse categories
+	if categories := r.URL.Query().Get("categories"); categories != "" {
+		filters.Categories = []string{categories}
+	}
+
+	// Parse price range
+	if minPrice := r.URL.Query().Get("min_price"); minPrice != "" {
+		if price, err := parseFloat(minPrice); err == nil {
+			filters.MinPrice = &price
+		}
+	}
+	if maxPrice := r.URL.Query().Get("max_price"); maxPrice != "" {
+		if price, err := parseFloat(maxPrice); err == nil {
+			filters.MaxPrice = &price
+		}
+	}
+
+	// Parse rating
+	if minRating := r.URL.Query().Get("min_rating"); minRating != "" {
+		if rating, err := parseFloat(minRating); err == nil {
+			filters.MinRating = &rating
+		}
+	}
+
+	// Parse stock filter
+	if inStockOnly := r.URL.Query().Get("in_stock_only"); inStockOnly == "true" {
+		filters.InStockOnly = true
+	}
+
+	// Parse pagination
+	if page := r.URL.Query().Get("page"); page != "" {
+		if p, err := parseInt(page); err == nil && p > 0 {
+			filters.Page = p
+		}
+	}
+	if pageSize := r.URL.Query().Get("page_size"); pageSize != "" {
+		if ps, err := parseInt(pageSize); err == nil && ps > 0 && ps <= 100 {
+			filters.PageSize = ps
+		}
+	}
+
+	// Perform search
+	results := productIndex.Search(query, filters)
+
+	// Track search for analytics
+	searchEngine.trending.Track(query)
+	if userID != "" {
+		searchEngine.searchHistory.Add(userID, query, len(results))
+	}
+
+	// Apply pagination
+	total := len(results)
+	totalPages := (total + filters.PageSize - 1) / filters.PageSize
+
+	startIdx := (filters.Page - 1) * filters.PageSize
+	endIdx := startIdx + filters.PageSize
+
+	if startIdx >= total {
+		results = []SearchResult{}
+	} else {
+		if endIdx > total {
+			endIdx = total
+		}
+		results = results[startIdx:endIdx]
+	}
+
+	// Build response
+	took := time.Since(start).Milliseconds()
+
+	response := SearchResponse{
+		Query:      query,
+		Results:    results,
+		Total:      total,
+		Page:       filters.Page,
+		PageSize:   filters.PageSize,
+		TotalPages: totalPages,
+		Filters:    filters,
+		Took:       took,
+	}
+
+	respondJSON(w, http.StatusOK, response)
+}
+
+// Helper functions for parsing query parameters
+func parseFloat(s string) (float64, error) {
+	return strconv.ParseFloat(s, 64)
+}
+
+func parseInt(s string) (int, error) {
+	return strconv.Atoi(s)
+}
+
 func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -330,13 +438,15 @@ func main() {
 		port = "8097"
 	}
 
-	// Initialize search engine
+	// Initialize search engine and product index
 	searchEngine = NewSearchEngine()
+	productIndex = NewProductIndex()
 
 	// Setup router
 	router := mux.NewRouter()
 
 	// Routes
+	router.HandleFunc("/search", searchHandler).Methods("GET")
 	router.HandleFunc("/autocomplete", autocompleteHandler).Methods("GET")
 	router.HandleFunc("/trending", trendingHandler).Methods("GET")
 	router.HandleFunc("/history/{user_id}", searchHistoryHandler).Methods("GET")
@@ -358,9 +468,12 @@ func main() {
 
 	// Start server
 	log.Printf("[Search Service] Starting on port %s", port)
+	log.Printf("[Search Service] Search: GET /search?q=<query>&filters...")
 	log.Printf("[Search Service] Autocomplete: GET /autocomplete?q=<query>")
 	log.Printf("[Search Service] Trending: GET /trending")
 	log.Printf("[Search Service] WebSocket: ws://localhost:%s/ws/trending", port)
+	log.Printf("[Search Service] Health: GET /health")
+	log.Printf("[Search Service] Stats: GET /stats")
 
 	if err := http.ListenAndServe(":"+port, handler); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
