@@ -2,7 +2,127 @@
 
 This document summarizes the recent improvements made to the microservices-demo project.
 
-## Latest Updates (Session 3 - Production Hardening)
+## Latest Updates (Session 4 - Additional Security Hardening)
+
+### Cookie Security, CORS, and Request Size Limits
+
+**3 additional MEDIUM priority security improvements** implemented for enhanced protection:
+
+#### Frontend Service (Go) - 3 Major Improvements
+
+**1. Cookie Security Hardening** (`src/frontend/middleware.go`, `src/frontend/handlers.go`)
+- ✅ **Session Cookie** (`shop_session-id`):
+  * HttpOnly: true (prevents JavaScript access, XSS protection)
+  * Secure: true in production/HTTPS (MITM protection)
+  * SameSite: Lax (CSRF protection, allows top-level navigation)
+  * Path: / (explicit scope)
+- ✅ **Currency Cookie** (`shop_currency`):
+  * HttpOnly: false (allows JavaScript for currency display)
+  * Secure: true in production/HTTPS
+  * SameSite: Lax (CSRF protection)
+  * Path: /
+- ✅ **Environment-aware security**: `isSecureContext()` helper function
+  * Automatically detects production environment (ENV=production)
+  * Detects HTTPS via r.TLS or X-Forwarded-Proto header
+  * Flexible for dev/staging/production deployments
+- ✅ **Proper logout**: Cookies deleted with matching security attributes
+- **Security Benefits**:
+  * Prevents cookie theft via XSS attacks (HttpOnly)
+  * Prevents cookie interception over HTTP (Secure)
+  * Prevents CSRF attacks (SameSite)
+- **OWASP**: A02:2021 - Cryptographic Failures (session management)
+- **CWE**: CWE-614 (Sensitive Cookie Without 'Secure' Attribute), CWE-1004 (Sensitive Cookie Without HttpOnly Flag)
+
+**2. CORS Configuration** (`src/frontend/middleware.go`, `src/frontend/main.go`)
+- ✅ **corsMiddleware** with origin whitelist validation
+  * Validates Origin header against ALLOWED_ORIGINS environment variable
+  * Supports comma-separated list: "https://example.com,https://app.example.com"
+  * Supports wildcard "*" for development (not recommended for production)
+  * Handles preflight OPTIONS requests
+  * Returns Access-Control-* headers only for allowed origins
+- ✅ **CORS Headers**:
+  * Access-Control-Allow-Origin: Validated origin
+  * Access-Control-Allow-Credentials: true (enables cookies)
+  * Access-Control-Allow-Methods: GET, POST, OPTIONS
+  * Access-Control-Allow-Headers: Content-Type, Authorization
+  * Access-Control-Max-Age: 3600 (1 hour preflight cache)
+- **Use Cases**:
+  * Frontend served from different domain than API
+  * Multiple frontend deployments (staging, production)
+  * Mobile apps with web views
+  * Third-party integrations with explicit whitelist
+- **OWASP**: A05:2021 - Security Misconfiguration (CORS policy)
+
+**3. Request Body Size Limits** (`src/frontend/handlers.go`)
+- ✅ Applied **10KB limit** to 4 POST endpoints using `http.MaxBytesReader`:
+  * `addToCartHandler` (POST /cart) - Form: product_id, quantity
+  * `emptyCartHandler` (POST /cart/empty) - Defense-in-depth
+  * `placeOrderHandler` (POST /cart/checkout) - Form: email, address, payment details
+  * `setCurrencyHandler` (POST /setCurrency) - Form: currency_code
+- ✅ **Note**: `chatBotHandler` (POST /bot) already has 1MB limit for JSON with image URLs
+- **Security Benefits**:
+  * Prevents memory exhaustion from oversized payloads
+  * Mitigates Slowloris-style attacks using large bodies
+  * Fast-fail on malicious requests before parsing
+  * Returns 413 Payload Too Large automatically
+- **OWASP**: A05:2021 - Security Misconfiguration (resource limits)
+- **CWE**: CWE-400 (Uncontrolled Resource Consumption)
+
+#### Shopping Assistant Service (Python/Flask) - 1 Major Improvement
+
+**1. CORS Configuration** (`shoppingassistantservice.py`)
+- ✅ Added CORS headers to `set_security_headers` after_request handler
+  * Validates Origin header against ALLOWED_ORIGINS environment variable
+  * Supports comma-separated list of allowed origins
+  * Supports wildcard "*" for development
+- ✅ Added **OPTIONS route handler** for preflight requests
+  * Returns 200 OK with CORS headers from after_request
+- ✅ **CORS Headers**:
+  * Access-Control-Allow-Origin: Validated origin
+  * Access-Control-Allow-Credentials: true
+  * Access-Control-Allow-Methods: POST, OPTIONS
+  * Access-Control-Allow-Headers: Content-Type, Authorization
+  * Access-Control-Max-Age: 3600
+- **Use Cases**: Same as frontend - enables API calls from different origins
+
+#### Session 4 Summary
+
+**Files Modified**: 3 files
+- `src/frontend/middleware.go` - Added isSecureContext(), updated ensureSessionID(), added corsMiddleware()
+- `src/frontend/handlers.go` - Updated setCurrencyHandler(), logoutHandler(), added MaxBytesReader to 4 POST handlers
+- `src/frontend/main.go` - Applied corsMiddleware to handler chain
+- `src/shoppingassistantservice/shoppingassistantservice.py` - Added CORS to set_security_headers, added OPTIONS handler
+
+**Code Changes**: +166 insertions, -33 deletions
+
+**Issues Resolved**: 3 MEDIUM priority security improvements
+1. Cookie security hardening (CWE-614, CWE-1004)
+2. CORS configuration (A05:2021)
+3. Request body size limits (CWE-400)
+
+**Environment Variables** (New):
+```bash
+# CORS Configuration (optional)
+ALLOWED_ORIGINS=""  # Not set: same-origin only (default)
+ALLOWED_ORIGINS="*" # Allow all origins (dev only)
+ALLOWED_ORIGINS="https://example.com,https://app.example.com" # Whitelist (recommended)
+```
+
+**Security Impact**:
+- ✅ **XSS Protection**: HttpOnly cookies prevent JavaScript access
+- ✅ **MITM Protection**: Secure cookies transmitted only over HTTPS
+- ✅ **CSRF Protection**: SameSite cookies restrict cross-site requests
+- ✅ **CORS Control**: Explicit origin whitelisting prevents unauthorized API access
+- ✅ **DoS Protection**: Body size limits prevent resource exhaustion
+
+**Commits** (Session 4):
+- `a1e9a4c` - Implement cookie security hardening with HttpOnly, Secure, and SameSite flags
+- `a4d466f` - Implement CORS configuration for frontend and shopping assistant services
+- `74eac72` - Add request body size limits to all POST endpoints for DoS prevention
+
+---
+
+## Session 3 - Production Hardening
 
 ### Comprehensive Production Hardening for HTTP Services
 
