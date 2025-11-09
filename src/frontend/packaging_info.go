@@ -17,9 +17,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"regexp"
+	"time"
 )
 
 /*
@@ -29,6 +32,10 @@ This file contains code related to the frontend and the "packaging" microservice
 
 var (
 	packagingServiceUrl string
+	// HTTP client with timeout to prevent resource exhaustion
+	packagingHTTPClient = &http.Client{
+		Timeout: 10 * time.Second,
+	}
 )
 
 type PackagingInfo struct {
@@ -47,11 +54,56 @@ func isPackagingServiceConfigured() bool {
 	return packagingServiceUrl != ""
 }
 
+// validateProductId validates that a product ID contains only safe characters
+// to prevent SSRF and path traversal attacks
+func validateProductId(productId string) error {
+	if productId == "" {
+		return fmt.Errorf("product ID cannot be empty")
+	}
+
+	// Product IDs should only contain alphanumeric characters and hyphens
+	// This prevents path traversal (../) and URL manipulation attacks
+	validProductId := regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
+	if !validProductId.MatchString(productId) {
+		return fmt.Errorf("invalid product ID: must contain only alphanumeric characters and hyphens")
+	}
+
+	// Additional length check to prevent excessively long IDs
+	if len(productId) > 64 {
+		return fmt.Errorf("product ID too long: maximum 64 characters")
+	}
+
+	return nil
+}
+
 func httpGetPackagingInfo(productId string) (*PackagingInfo, error) {
-	// Make the GET request
-	url := packagingServiceUrl + "/" + productId
-	fmt.Println("Requesting packaging info from URL: ", url)
-	resp, err := http.Get(url)
+	// Validate product ID to prevent SSRF attacks
+	if err := validateProductId(productId); err != nil {
+		return nil, fmt.Errorf("invalid product ID: %w", err)
+	}
+
+	// Construct URL safely using url.JoinPath to prevent path traversal
+	baseURL, err := url.Parse(packagingServiceUrl)
+	if err != nil {
+		return nil, fmt.Errorf("invalid packaging service URL: %w", err)
+	}
+
+	// Use url.JoinPath to safely combine base URL with product ID
+	fullURL := baseURL.JoinPath(productId).String()
+
+	// Validate that the final URL still points to the expected host
+	finalURL, err := url.Parse(fullURL)
+	if err != nil {
+		return nil, fmt.Errorf("constructed URL is invalid: %w", err)
+	}
+	if finalURL.Host != baseURL.Host {
+		return nil, fmt.Errorf("URL host mismatch: potential SSRF attack")
+	}
+
+	fmt.Println("Requesting packaging info from URL: ", fullURL)
+
+	// Use HTTP client with timeout
+	resp, err := packagingHTTPClient.Get(fullURL)
 	if err != nil {
 		return nil, err
 	}
@@ -62,8 +114,8 @@ func httpGetPackagingInfo(productId string) (*PackagingInfo, error) {
 		return nil, fmt.Errorf("Unexpected status code: %d", resp.StatusCode)
 	}
 
-	// Read the JSON response body
-	responseBody, err := ioutil.ReadAll(resp.Body)
+	// Read the JSON response body (using io.ReadAll instead of deprecated ioutil.ReadAll)
+	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}

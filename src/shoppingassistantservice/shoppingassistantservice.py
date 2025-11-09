@@ -20,7 +20,7 @@ from google.cloud import secretmanager_v1
 from urllib.parse import unquote
 from langchain_core.messages import HumanMessage
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
-from flask import Flask, request
+from flask import Flask, request, jsonify
 
 from langchain_google_alloydb_pg import AlloyDBEngine, AlloyDBVectorStore
 
@@ -65,8 +65,33 @@ def create_app():
     @app.route("/", methods=['POST'])
     def talkToGemini():
         print("Beginning RAG call")
+
+        # Validate that request has JSON content
+        if not request.is_json:
+            return jsonify({'error': 'Content-Type must be application/json'}), 400
+
+        # Validate required fields are present
+        if not request.json:
+            return jsonify({'error': 'Request body must be valid JSON'}), 400
+
+        if 'message' not in request.json:
+            return jsonify({'error': 'Missing required field: message'}), 400
+
+        if 'image' not in request.json:
+            return jsonify({'error': 'Missing required field: image'}), 400
+
         prompt = request.json['message']
+
+        # Validate message is not empty
+        if not prompt or not isinstance(prompt, str):
+            return jsonify({'error': 'message must be a non-empty string'}), 400
+
         prompt = unquote(prompt)
+
+        # Validate image URL is not empty
+        image_url = request.json['image']
+        if not image_url or not isinstance(image_url, str):
+            return jsonify({'error': 'image must be a non-empty string (URL)'}), 400
 
         # Step 1 – Get a room description from Gemini-vision-pro
         llm_vision = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
@@ -76,7 +101,7 @@ def create_app():
                     "type": "text",
                     "text": "You are a professional interior designer, give me a detailed decsription of the style of the room in this image",
                 },
-                {"type": "image_url", "image_url": request.json['image']},
+                {"type": "image_url", "image_url": image_url},
             ]
         )
         response = llm_vision.invoke([message])

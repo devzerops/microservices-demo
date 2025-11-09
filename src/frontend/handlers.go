@@ -16,11 +16,12 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
-	"math/rand"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -35,6 +36,13 @@ import (
 	pb "github.com/GoogleCloudPlatform/microservices-demo/src/frontend/genproto"
 	"github.com/GoogleCloudPlatform/microservices-demo/src/frontend/money"
 	"github.com/GoogleCloudPlatform/microservices-demo/src/frontend/validator"
+)
+
+var (
+	// HTTP client with timeout to prevent resource exhaustion attacks
+	httpClientWithTimeout = &http.Client{
+		Timeout: 30 * time.Second,
+	}
 )
 
 type platformDetails struct {
@@ -210,7 +218,11 @@ func (fe *frontendServer) productHandler(w http.ResponseWriter, r *http.Request)
 
 func (fe *frontendServer) addToCartHandler(w http.ResponseWriter, r *http.Request) {
 	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
-	quantity, _ := strconv.ParseUint(r.FormValue("quantity"), 10, 32)
+	quantity, err := strconv.ParseUint(r.FormValue("quantity"), 10, 32)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "invalid quantity format"), http.StatusBadRequest)
+		return
+	}
 	productID := r.FormValue("product_id")
 	payload := validator.AddToCartPayload{
 		Quantity:  quantity,
@@ -321,17 +333,38 @@ func (fe *frontendServer) placeOrderHandler(w http.ResponseWriter, r *http.Reque
 	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
 	log.Debug("placing order")
 
+	// Parse and validate numeric fields with proper error handling
+	zipCode, err := strconv.ParseInt(r.FormValue("zip_code"), 10, 32)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "invalid zip code format"), http.StatusBadRequest)
+		return
+	}
+
+	ccMonth, err := strconv.ParseInt(r.FormValue("credit_card_expiration_month"), 10, 32)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "invalid credit card expiration month"), http.StatusBadRequest)
+		return
+	}
+
+	ccYear, err := strconv.ParseInt(r.FormValue("credit_card_expiration_year"), 10, 32)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "invalid credit card expiration year"), http.StatusBadRequest)
+		return
+	}
+
+	ccCVV, err := strconv.ParseInt(r.FormValue("credit_card_cvv"), 10, 32)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "invalid credit card CVV"), http.StatusBadRequest)
+		return
+	}
+
 	var (
 		email         = r.FormValue("email")
 		streetAddress = r.FormValue("street_address")
-		zipCode, _    = strconv.ParseInt(r.FormValue("zip_code"), 10, 32)
 		city          = r.FormValue("city")
 		state         = r.FormValue("state")
 		country       = r.FormValue("country")
 		ccNumber      = r.FormValue("credit_card_number")
-		ccMonth, _    = strconv.ParseInt(r.FormValue("credit_card_expiration_month"), 10, 32)
-		ccYear, _     = strconv.ParseInt(r.FormValue("credit_card_expiration_year"), 10, 32)
-		ccCVV, _      = strconv.ParseInt(r.FormValue("credit_card_cvv"), 10, 32)
 	)
 
 	payload := validator.PlaceOrderPayload{
@@ -401,6 +434,7 @@ func (fe *frontendServer) placeOrderHandler(w http.ResponseWriter, r *http.Reque
 }
 
 func (fe *frontendServer) assistantHandler(w http.ResponseWriter, r *http.Request) {
+	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
 	currencies, err := fe.getCurrencies(r.Context())
 	if err != nil {
 		renderHTTPError(log, r, w, errors.Wrap(err, "could not retrieve currencies"), http.StatusInternalServerError)
@@ -444,8 +478,10 @@ func (fe *frontendServer) getProductByID(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	w.Write(jsonData)
+	// Set header and status code before writing body
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	w.Write(jsonData)
 }
 
 func (fe *frontendServer) chatBotHandler(w http.ResponseWriter, r *http.Request) {
@@ -469,11 +505,15 @@ func (fe *frontendServer) chatBotHandler(w http.ResponseWriter, r *http.Request)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	res, err := http.DefaultClient.Do(req)
+
+	// Use HTTP client with timeout to prevent resource exhaustion
+	res, err := httpClientWithTimeout.Do(req)
 	if err != nil {
 		renderHTTPError(log, r, w, errors.Wrap(err, "failed to send request"), http.StatusInternalServerError)
 		return
 	}
+	// Ensure response body is closed to prevent resource leak
+	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -490,10 +530,11 @@ func (fe *frontendServer) chatBotHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// respond with the same message
-	json.NewEncoder(w).Encode(Response{Message: response.Content})
-
+	// Set status code before encoding response
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	// Respond with the message
+	json.NewEncoder(w).Encode(Response{Message: response.Content})
 }
 
 func (fe *frontendServer) setCurrencyHandler(w http.ResponseWriter, r *http.Request) {
@@ -530,7 +571,14 @@ func (fe *frontendServer) chooseAd(ctx context.Context, ctxKeys []string, log lo
 		log.WithField("error", err).Warn("failed to retrieve ads")
 		return nil
 	}
-	return ads[rand.Intn(len(ads))]
+
+	// Use cryptographically secure random number generator
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(len(ads))))
+	if err != nil {
+		log.WithField("error", err).Warn("failed to generate random number for ad selection")
+		return ads[0] // Fallback to first ad if random generation fails
+	}
+	return ads[n.Int64()]
 }
 
 func renderHTTPError(log logrus.FieldLogger, r *http.Request, w http.ResponseWriter, err error, code int) {

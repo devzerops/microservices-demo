@@ -15,21 +15,13 @@
 package main
 
 import (
+	"crypto/rand"
 	"fmt"
-	"math/rand"
-	"time"
+	"math/big"
 )
 
-// seeded determines if the random number generator is ready.
-var seeded bool = false
-
-// CreateTrackingId generates a tracking ID.
+// CreateTrackingId generates a cryptographically secure tracking ID.
 func CreateTrackingId(salt string) string {
-	if !seeded {
-		rand.Seed(time.Now().UnixNano())
-		seeded = true
-	}
-
 	return fmt.Sprintf("%c%c-%d%s-%d%s",
 		getRandomLetterCode(),
 		getRandomLetterCode(),
@@ -40,16 +32,29 @@ func CreateTrackingId(salt string) string {
 	)
 }
 
-// getRandomLetterCode generates a code point value for a capital letter.
+// getRandomLetterCode generates a code point value for a capital letter using crypto/rand.
 func getRandomLetterCode() uint32 {
-	return 65 + uint32(rand.Intn(25))
+	// Generate a random number between 0 and 25 using crypto/rand
+	n, err := rand.Int(rand.Reader, big.NewInt(26))
+	if err != nil {
+		// Fallback to 'A' if random generation fails (should be extremely rare)
+		return 65
+	}
+	return 65 + uint32(n.Int64())
 }
 
-// getRandomNumber generates a string representation of a number with the requested number of digits.
+// getRandomNumber generates a string representation of a number with the requested number of digits
+// using cryptographically secure random number generation.
 func getRandomNumber(digits int) string {
 	str := ""
 	for i := 0; i < digits; i++ {
-		str = fmt.Sprintf("%s%d", str, rand.Intn(10))
+		n, err := rand.Int(rand.Reader, big.NewInt(10))
+		if err != nil {
+			// Fallback to '0' if random generation fails (should be extremely rare)
+			str = fmt.Sprintf("%s0", str)
+			continue
+		}
+		str = fmt.Sprintf("%s%d", str, n.Int64())
 	}
 
 	return str

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"regexp"
 	"strings"
 
 	"cloud.google.com/go/alloydbconn"
@@ -27,6 +28,7 @@ import (
 	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	pb "github.com/GoogleCloudPlatform/microservices-demo/src/productcatalogservice/genproto"
 	"github.com/golang/protobuf/jsonpb"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -56,6 +58,28 @@ func loadCatalogFromLocalFile(catalog *pb.ListProductsResponse) error {
 	}
 
 	log.Info("successfully parsed product catalog json")
+	return nil
+}
+
+// validateTableName validates that a table name contains only safe characters
+// to prevent SQL injection attacks. Returns error if validation fails.
+func validateTableName(tableName string) error {
+	if tableName == "" {
+		return fmt.Errorf("table name cannot be empty")
+	}
+
+	// Table name must start with a letter or underscore and contain only alphanumeric chars and underscores
+	// This is a standard SQL identifier pattern
+	validTableName := regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+	if !validTableName.MatchString(tableName) {
+		return fmt.Errorf("invalid table name: must contain only letters, numbers, and underscores, and start with a letter or underscore")
+	}
+
+	// Additional length check to prevent excessively long table names
+	if len(tableName) > 63 {
+		return fmt.Errorf("table name too long: maximum 63 characters")
+	}
+
 	return nil
 }
 
@@ -93,6 +117,12 @@ func loadCatalogFromAlloyDB(catalog *pb.ListProductsResponse) error {
 	pgTableName := os.Getenv("ALLOYDB_TABLE_NAME")
 	pgSecretName := os.Getenv("ALLOYDB_SECRET_NAME")
 
+	// Validate table name to prevent SQL injection
+	if err := validateTableName(pgTableName); err != nil {
+		log.Warnf("invalid table name: %v", err)
+		return err
+	}
+
 	pgPassword, err := getSecretPayload(projectID, pgSecretName, "latest")
 	if err != nil {
 		return err
@@ -129,7 +159,10 @@ func loadCatalogFromAlloyDB(catalog *pb.ListProductsResponse) error {
 	}
 	defer pool.Close()
 
-	query := "SELECT id, name, description, picture, price_usd_currency_code, price_usd_units, price_usd_nanos, categories FROM " + pgTableName
+	// Use pgx.Identifier to safely quote the table name
+	// This prevents SQL injection by properly escaping the identifier
+	query := fmt.Sprintf("SELECT id, name, description, picture, price_usd_currency_code, price_usd_units, price_usd_nanos, categories FROM %s",
+		pgx.Identifier{pgTableName}.Sanitize())
 	rows, err := pool.Query(context.Background(), query)
 	if err != nil {
 		log.Warnf("failed to query database: %v", err)
