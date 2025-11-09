@@ -25,6 +25,7 @@ var (
 		"search":       getEnv("SEARCH_URL", "http://search:8097"),
 		"analytics":    getEnv("ANALYTICS_URL", "http://analytics:8099"),
 		"review":       getEnv("REVIEW_URL", "http://review:8096"),
+		"wishlist":     getEnv("WISHLIST_URL", "http://wishlist:8098"),
 	}
 
 	rateLimiters = make(map[string]*rate.Limiter)

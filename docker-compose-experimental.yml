@@ -279,6 +279,34 @@ services:
           cpus: '0.25'
           memory: 128M
 
+  # Wishlist Service - Save favorites and price tracking
+  wishlist:
+    build:
+      context: ./src/wishlistservice
+      dockerfile: Dockerfile
+    container_name: wishlist
+    ports:
+      - "8098:8098"
+    environment:
+      - PORT=8098
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8098/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - experimental-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
 networks:
   experimental-network:
     driver: bridge
