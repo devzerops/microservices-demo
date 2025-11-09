@@ -6,9 +6,9 @@ This document summarizes the recent improvements made to the microservices-demo 
 
 ### Comprehensive Production Hardening for HTTP Services
 
-**All HIGH priority production readiness issues resolved** for frontend and shoppingassistantservice:
+**All HIGH priority + 1 MEDIUM priority production readiness issues resolved** for frontend and shoppingassistantservice:
 
-#### Frontend Service (Go) - 4 Major Improvements
+#### Frontend Service (Go) - 5 Major Improvements
 
 **1. Security Headers Middleware** (`src/frontend/middleware.go`)
 - ✅ Created `securityHeadersMiddleware` with 7 security headers:
@@ -41,6 +41,17 @@ This document summarizes the recent improvements made to the microservices-demo 
 - ✅ Generic error messages by default
 - ✅ Detailed errors only when ENV=development or ENABLE_DEBUG_ERRORS=true
 - ✅ Full stack traces still logged for debugging
+
+**5. ChatBot Endpoint Input Validation** (`src/frontend/handlers.go`)
+- ✅ Request body size limit: 1MB maximum (prevents DoS attacks)
+- ✅ JSON structure validation with ChatBotRequest type
+- ✅ Required field validation (message, image)
+- ✅ Length validation:
+  * message: max 1000 characters
+  * image URL: max 2048 characters
+- ✅ Appropriate HTTP status codes (400 Bad Request, 413 Request Entity Too Large)
+- ✅ Defense-in-depth: Frontend validation before backend processing
+- ✅ Reduces unnecessary backend API calls for invalid requests
 
 #### Shopping Assistant Service (Python/Flask) - 4 Major Improvements
 
@@ -83,23 +94,28 @@ This document summarizes the recent improvements made to the microservices-demo 
 
 #### OWASP Coverage
 - ✅ **A01:2021** - Broken Access Control (information disclosure prevention)
+- ✅ **A04:2021** - Insecure Design (input validation)
 - ✅ **A05:2021** - Security Misconfiguration (security headers, timeouts)
 - ✅ **A09:2021** - Security Logging and Monitoring Failures (error handling)
 
-**Total Issues Resolved**: 8 HIGH priority issues
+**Total Issues Resolved**: 8 HIGH priority + 1 MEDIUM priority = 9 issues
 **Files Modified**: 4
 - `src/frontend/middleware.go` (+38 lines)
 - `src/frontend/main.go` (+69 lines)
-- `src/frontend/handlers.go` (+6 lines, -1 deletion)
+- `src/frontend/handlers.go` (+58 lines, -8 deletions) - updated in 2 commits
 - `src/shoppingassistantservice/shoppingassistantservice.py` (+106 lines, -33 deletions)
 
-**Code Changes**: +219 insertions, -35 deletions
+**Code Changes**: +271 insertions, -42 deletions
 
 **Environment Variables**:
 - `ENV=development` - Show detailed error messages in frontend
 - `ENABLE_DEBUG_ERRORS=true` - Alternative way to enable detailed errors
 
-See commit `56a9e81` for full implementation details.
+**Commits**:
+- `56a9e81` - Implement production hardening for frontend and shopping assistant services
+- `03ccf72` - Add input validation to chatBotHandler endpoint
+
+See commits for full implementation details.
 
 ---
 
