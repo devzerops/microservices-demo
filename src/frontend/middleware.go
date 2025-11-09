@@ -15,7 +15,9 @@
 package main
 
 import (
+	"compress/gzip"
 	"context"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -331,6 +333,70 @@ func getClientIP(r *http.Request) string {
 		ip = ip[:idx]
 	}
 	return ip
+}
+
+// gzipResponseWriter wraps http.ResponseWriter to provide gzip compression
+type gzipResponseWriter struct {
+	io.Writer
+	http.ResponseWriter
+	wroteHeader bool
+}
+
+func (w *gzipResponseWriter) Write(b []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.Writer.Write(b)
+}
+
+func (w *gzipResponseWriter) WriteHeader(statusCode int) {
+	w.wroteHeader = true
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+// compressionMiddleware provides gzip compression for responses
+func compressionMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip compression if disabled
+		if os.Getenv("ENABLE_COMPRESSION") == "false" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Check if client accepts gzip encoding
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Get compression level from environment (default: 6)
+		compressionLevel := gzip.DefaultCompression
+		if levelStr := os.Getenv("COMPRESSION_LEVEL"); levelStr != "" {
+			if level, err := strconv.Atoi(levelStr); err == nil && level >= 1 && level <= 9 {
+				compressionLevel = level
+			}
+		}
+
+		// Create gzip writer
+		gz, err := gzip.NewWriterLevel(w, compressionLevel)
+		if err != nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+		defer gz.Close()
+
+		// Set Content-Encoding header
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Del("Content-Length") // Content-Length will be wrong after compression
+
+		// Wrap response writer
+		gzw := &gzipResponseWriter{
+			Writer:         gz,
+			ResponseWriter: w,
+		}
+
+		next.ServeHTTP(gzw, r)
+	})
 }
 
 func ensureSessionID(next http.Handler) http.HandlerFunc {

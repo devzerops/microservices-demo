@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gzip
 import logging
 import os
 import signal
@@ -21,6 +22,7 @@ import sys
 import time
 import threading
 from collections import defaultdict
+from io import BytesIO
 from typing import Dict, List, Tuple
 
 from google.cloud import secretmanager_v1
@@ -263,6 +265,23 @@ def create_app():
                 response.headers['X-RateLimit-Limit'] = str(RATE_LIMIT_REQUESTS)
                 response.headers['X-RateLimit-Remaining'] = str(g.rate_limit_remaining)
                 response.headers['X-RateLimit-Reset'] = str(int(time.time()) + RATE_LIMIT_WINDOW)
+
+        # Apply gzip compression if enabled and client accepts it
+        if os.environ.get('ENABLE_COMPRESSION') != 'false':
+            accept_encoding = request.headers.get('Accept-Encoding', '')
+            if 'gzip' in accept_encoding and response.status_code == 200:
+                # Only compress JSON responses
+                content_type = response.headers.get('Content-Type', '')
+                if 'application/json' in content_type:
+                    # Compress response data
+                    gzip_buffer = BytesIO()
+                    with gzip.GzipFile(mode='wb', fileobj=gzip_buffer, compresslevel=6) as gzip_file:
+                        gzip_file.write(response.get_data())
+
+                    # Set compressed data and headers
+                    response.set_data(gzip_buffer.getvalue())
+                    response.headers['Content-Encoding'] = 'gzip'
+                    response.headers['Content-Length'] = len(response.get_data())
 
         return response
 

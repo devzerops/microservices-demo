@@ -171,6 +171,7 @@ func main() {
 	handler = securityHeadersMiddleware(handler)       // add security headers
 	handler = corsMiddleware(handler)                  // add CORS support
 	handler = otelhttp.NewHandler(handler, "frontend") // add OTel tracing
+	handler = compressionMiddleware(handler)           // add gzip compression (bandwidth optimization)
 
 	// Configure HTTP server with timeouts
 	srv := &http.Server{
