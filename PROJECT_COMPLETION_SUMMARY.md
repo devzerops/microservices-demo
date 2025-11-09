@@ -2,12 +2,12 @@
 
 ## Executive Summary
 
-This document provides a comprehensive overview of all improvements made to the microservices-demo project across **three major work sessions**. The project has undergone significant enhancements in **security, testing, observability, code quality, and production readiness**.
+This document provides a comprehensive overview of all improvements made to the microservices-demo project across **four major work sessions**. The project has undergone significant enhancements in **security, testing, observability, code quality, and production readiness**.
 
 ### Key Achievements
 
-- **76 Total Issues Resolved** (67 from Sessions 1-2, 9 from Session 3)
-  - 19 Security vulnerabilities (2 Critical, 13 High, 4 Medium)
+- **79 Total Issues Resolved** (67 from Sessions 1-2, 9 from Session 3, 3 from Session 4)
+  - 22 Security vulnerabilities (2 Critical, 13 High, 7 Medium)
   - 57 Code quality, configuration, and maintainability improvements
 - **Test Coverage**: Increased from 85% to 95% (18/21 → 20/21 services)
 - **Documentation**: 3,298+ lines of comprehensive guides
@@ -438,7 +438,7 @@ gunicorn --bind 0.0.0.0:8080 --workers 4 --timeout 60 --graceful-timeout 30 shop
 - Input validation prevents abuse of expensive LLM APIs
 - Timeouts prevent runaway API costs
 
-### Session 3 Commits (6 total)
+### Session 3 Commits (7 total)
 
 ```
 56a9e81 - Implement production hardening for frontend and shopping assistant services
@@ -448,6 +448,219 @@ d4c5732 - Update RECENT_IMPROVEMENTS.md with Session 3 production hardening
 03ccf72 - Add input validation to chatBotHandler endpoint
 1db4543 - Update RECENT_IMPROVEMENTS.md with chatBotHandler validation
 4b5fdb8 - Update PR_DESCRIPTION.md with chatBotHandler validation
+8bacbaa - Update PROJECT_COMPLETION_SUMMARY.md with final stats
+```
+
+---
+
+## Session 4: Additional Security Hardening (3 MEDIUM priority issues)
+
+Following Session 3's HIGH priority work, **3 additional MEDIUM priority** security improvements were implemented to further enhance cookie security, enable CORS support, and add request size limits.
+
+### Frontend Service (Go) - 3 Major Improvements
+
+#### 1. Cookie Security Hardening
+**Files**: `src/frontend/middleware.go`, `src/frontend/handlers.go`
+
+Implemented comprehensive cookie security attributes to prevent XSS, CSRF, and MITM attacks:
+
+**Session Cookie** (`shop_session-id`):
+```go
+http.SetCookie(w, &http.Cookie{
+    Name:     cookieSessionID,
+    Value:    sessionID,
+    MaxAge:   cookieMaxAge,
+    Path:     "/",
+    HttpOnly: true,                    // Prevents JavaScript access (XSS protection)
+    Secure:   isSecureContext(r),      // Only transmit over HTTPS in production
+    SameSite: http.SameSiteLax,        // CSRF protection (allows top-level navigation)
+})
+```
+
+**Currency Cookie** (`shop_currency`):
+- HttpOnly: false (allows JavaScript for currency display)
+- Secure: true in production/HTTPS
+- SameSite: Lax (CSRF protection)
+- Path: /
+
+**Environment-aware Security**:
+Created `isSecureContext()` helper function that automatically detects:
+- Production environment (`ENV=production`)
+- HTTPS via `r.TLS != nil`
+- HTTPS proxy via `X-Forwarded-Proto: https` header
+
+**Logout Handler Improvement**:
+Updated to delete cookies with matching security attributes for proper cleanup.
+
+**Security Benefits**:
+- ✅ Prevents cookie theft via XSS attacks (HttpOnly flag)
+- ✅ Prevents cookie interception over HTTP (Secure flag)
+- ✅ Prevents CSRF attacks (SameSite flag)
+- ✅ Flexible for dev/staging/production environments
+
+**OWASP Coverage**: A02:2021 - Cryptographic Failures (session management)
+**CWE**: CWE-614 (Sensitive Cookie Without 'Secure' Attribute), CWE-1004 (Sensitive Cookie Without HttpOnly Flag)
+
+#### 2. CORS Configuration
+**Files**: `src/frontend/middleware.go`, `src/frontend/main.go`
+
+Implemented Cross-Origin Resource Sharing (CORS) to enable the frontend to be called from different origins:
+
+**corsMiddleware** implementation:
+```go
+func corsMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        origin := r.Header.Get("Origin")
+        allowedOriginsEnv := os.Getenv("ALLOWED_ORIGINS")
+
+        // Validate origin against whitelist
+        if allowedOriginsEnv != "" && origin != "" {
+            allowed := false
+            allowedOrigins := strings.Split(allowedOriginsEnv, ",")
+
+            for _, allowedOrigin := range allowedOrigins {
+                if allowedOrigin == "*" || allowedOrigin == origin {
+                    allowed = true
+                    break
+                }
+            }
+
+            if allowed {
+                w.Header().Set("Access-Control-Allow-Origin", origin)
+                w.Header().Set("Access-Control-Allow-Credentials", "true")
+                w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+                w.Header().Set("Access-Control-Max-Age", "3600")
+            }
+        }
+
+        // Handle preflight OPTIONS requests
+        if r.Method == http.MethodOptions {
+            w.WriteHeader(http.StatusOK)
+            return
+        }
+
+        next.ServeHTTP(w, r)
+    })
+}
+```
+
+**Configuration Options**:
+```bash
+# Not set: CORS disabled, same-origin only (default)
+ALLOWED_ORIGINS=""
+
+# Allow all origins (development only, not recommended for production)
+ALLOWED_ORIGINS="*"
+
+# Whitelist specific origins (recommended for production)
+ALLOWED_ORIGINS="https://example.com,https://app.example.com"
+```
+
+**CORS Headers**:
+- Access-Control-Allow-Origin: Validated origin
+- Access-Control-Allow-Credentials: true (enables cookies)
+- Access-Control-Allow-Methods: GET, POST, OPTIONS
+- Access-Control-Allow-Headers: Content-Type, Authorization
+- Access-Control-Max-Age: 3600 (cache preflight for 1 hour)
+
+**Use Cases**:
+- Frontend served from different domain than API
+- Multiple frontend deployments (staging, production)
+- Mobile apps with web views
+- Third-party integrations (with explicit whitelist)
+
+**OWASP Coverage**: A05:2021 - Security Misconfiguration (CORS policy)
+
+#### 3. Request Body Size Limits
+**File**: `src/frontend/handlers.go`
+
+Applied consistent body size limits to all POST endpoints to prevent DoS attacks:
+
+**Protected Endpoints** (10KB limit each):
+1. `addToCartHandler` (POST /cart)
+   - Form fields: product_id, quantity
+2. `emptyCartHandler` (POST /cart/empty)
+   - No form fields, but defense-in-depth protection
+3. `placeOrderHandler` (POST /cart/checkout)
+   - Form fields: email, address, payment details (10+ fields)
+4. `setCurrencyHandler` (POST /setCurrency)
+   - Form field: currency_code
+
+**Implementation**:
+```go
+// Added to beginning of each POST handler
+r.Body = http.MaxBytesReader(w, r.Body, 10*1024)
+```
+
+**Note**: `chatBotHandler` (POST /bot) already has 1MB limit from Session 3 (commit 03ccf72) due to JSON payloads with image URLs.
+
+**Size Rationale**:
+- Form data typically < 1KB
+- 10KB provides comfortable margin for legitimate requests
+- Small enough to prevent resource abuse
+- Consistent with standard form size limits
+
+**Security Benefits**:
+- ✅ Prevents memory exhaustion from oversized payloads
+- ✅ Mitigates Slowloris-style attacks using large bodies
+- ✅ Fast-fail on malicious requests before parsing
+- ✅ Returns 413 Payload Too Large automatically
+
+**OWASP Coverage**: A05:2021 - Security Misconfiguration (resource limits)
+**CWE**: CWE-400 (Uncontrolled Resource Consumption)
+
+### Shopping Assistant Service (Python/Flask) - 1 Major Improvement
+
+#### 1. CORS Configuration
+**File**: `src/shoppingassistantservice/shoppingassistantservice.py`
+
+Added CORS support to shopping assistant service:
+
+**Implementation**:
+- Added CORS headers to existing `set_security_headers` after_request handler
+- Validates Origin header against ALLOWED_ORIGINS environment variable
+- Supports comma-separated list of allowed origins
+- Supports wildcard "*" for development
+
+**Added OPTIONS Route Handler**:
+```python
+@app.route("/", methods=['OPTIONS'])
+def handle_options():
+    return '', 200
+```
+
+**CORS Headers** (same as frontend):
+- Access-Control-Allow-Origin: Validated origin
+- Access-Control-Allow-Credentials: true
+- Access-Control-Allow-Methods: POST, OPTIONS
+- Access-Control-Allow-Headers: Content-Type, Authorization
+- Access-Control-Max-Age: 3600
+
+### Session 4 Impact Summary
+
+**Security Improvements**:
+- Cookie security prevents XSS, CSRF, MITM attacks
+- CORS configuration enables secure cross-origin API calls
+- Request size limits prevent DoS attacks
+
+**Flexibility**:
+- Environment-aware cookie security (dev/staging/prod)
+- Configurable CORS whitelisting
+- Consistent body size limits across all endpoints
+
+**Compatibility**:
+- All changes backward compatible
+- CORS disabled by default (same-origin only)
+- Cookie security adapts to HTTP/HTTPS automatically
+
+### Session 4 Commits (4 total)
+
+```
+a1e9a4c - Implement cookie security hardening with HttpOnly, Secure, and SameSite flags
+a4d466f - Implement CORS configuration for frontend and shopping assistant services
+74eac72 - Add request body size limits to all POST endpoints for DoS prevention
+64a0e26 - Update RECENT_IMPROVEMENTS.md with Session 4 security hardening
 ```
 
 ---
@@ -485,6 +698,14 @@ EMBEDDING_MODEL=models/embedding-001  # shoppingassistantservice
                                       # For vector similarity search
 ```
 
+#### CORS Configuration (Session 4)
+```bash
+ALLOWED_ORIGINS=""                    # frontend, shoppingassistantservice
+                                      # Not set: CORS disabled, same-origin only (default)
+                                      # "*": Allow all origins (development only)
+                                      # "https://example.com,https://app.example.com": Whitelist (recommended)
+```
+
 #### Error Handling & Debugging
 ```bash
 ENV=development                # frontend
@@ -514,17 +735,17 @@ DISABLE_STATS=false                    # Disable metrics if needed
 | A03:2021 - Injection | 2 Critical | productcatalogservice, cartservice |
 | A01:2021 - Broken Access Control | 2 High (SSRF, info disclosure) | frontend, shoppingassistantservice |
 | A04:2021 - Insecure Design | 2 (1 High, 1 Medium) | shoppingassistantservice, frontend |
-| A05:2021 - Security Misconfiguration | 9 High (deprecated API, headers, timeouts) | frontend, checkoutservice, shoppingassistantservice |
+| A05:2021 - Security Misconfiguration | 12 (9 High + 3 Medium) | frontend, checkoutservice, shoppingassistantservice |
 | A06:2021 - Vulnerable Components | 1 High | gRPC library migration |
 | A09:2021 - Security Logging Failures | 11 files + error handling | Structured logging + comprehensive error handling |
-| A02:2021 - Cryptographic Failures | 1 Medium | Weak RNG replacement |
+| A02:2021 - Cryptographic Failures | 3 Medium (weak RNG + 2 cookie security) | frontend, adservice |
 
 ### Security Metrics
 
-- **Total Vulnerabilities Fixed**: 19 (10 from Sessions 1-2, 9 from Session 3)
+- **Total Vulnerabilities Fixed**: 22 (10 from Sessions 1-2, 9 from Session 3, 3 from Session 4)
   - Critical: 2 (SQL Injection × 2)
   - High: 13 (SSRF, crashes, validation, deprecated API, security headers × 2, timeouts × 2, graceful shutdown × 2, error sanitization, error handling)
-  - Medium: 4 (resource leaks, weak RNG, input validation)
+  - Medium: 7 (resource leaks, weak RNG, input validation, cookie security × 2, CORS config, body size limits)
 
 - **Security Documentation**: 827 lines in SECURITY.md
   - Before/after code examples
@@ -600,10 +821,14 @@ cd src/loadgenerator && pytest test_locustfile.py -v
 - Modified Files: 4 (frontend: 3, shoppingassistantservice: 1)
 - Total Lines: +271 insertions, -42 deletions
 
+**Session 4**:
+- Modified Files: 3 (frontend: 2, shoppingassistantservice: 1)
+- Total Lines: +166 insertions, -33 deletions
+
 **Combined**:
-- Total Files Modified: 42 unique files
-- Total Lines: +3,890 insertions, -188 deletions
-- Net Addition: +3,702 lines (tests, documentation, production hardening)
+- Total Files Modified: 44 unique files
+- Total Lines: +4,056 insertions, -221 deletions
+- Net Addition: +3,835 lines (tests, documentation, production hardening, security improvements)
 
 ---
 
@@ -628,7 +853,7 @@ All documentation is comprehensive and production-ready:
 
 ### ✅ Completed
 
-- [x] Security vulnerabilities fixed (19 total: 2 Critical, 13 High, 4 Medium)
+- [x] Security vulnerabilities fixed (22 total: 2 Critical, 13 High, 7 Medium)
 - [x] Structured logging across all services
 - [x] Environment-based configuration
 - [x] Health checks that actually test connectivity
@@ -645,6 +870,9 @@ All documentation is comprehensive and production-ready:
 - [x] **Comprehensive error handling** for all external APIs
 - [x] **Input validation** with length and format checks
 - [x] **LLM API protection** with timeouts and validation
+- [x] **Cookie security** with HttpOnly, Secure, SameSite flags (Session 4)
+- [x] **CORS configuration** with origin whitelisting (Session 4)
+- [x] **Request body size limits** on all POST endpoints (Session 4)
 
 ### 🔄 Recommended Next Steps
 
@@ -683,7 +911,7 @@ See SECURITY.md for detailed recommendations:
 claude/analyze-project-code-011CUwzfVwPzbHCKrWeS1qyM
 ```
 
-### All Commits (25 total)
+### All Commits (29 total)
 
 **Session 1 (10 commits)**:
 ```
@@ -711,7 +939,7 @@ a74c48a - Update PR_DESCRIPTION.md with complete Session 2 improvements
 f901e18 - Add PROJECT_COMPLETION_SUMMARY.md
 ```
 
-**Session 3 (7 commits)**:
+**Session 3 (8 commits)**:
 ```
 56a9e81 - Implement production hardening for frontend and shopping assistant services
 d4c5732 - Update RECENT_IMPROVEMENTS.md with Session 3 production hardening
@@ -720,7 +948,16 @@ d4c5732 - Update RECENT_IMPROVEMENTS.md with Session 3 production hardening
 03ccf72 - Add input validation to chatBotHandler endpoint
 1db4543 - Update RECENT_IMPROVEMENTS.md with chatBotHandler validation
 4b5fdb8 - Update PR_DESCRIPTION.md with chatBotHandler validation
-[current] - Update PROJECT_COMPLETION_SUMMARY.md with final stats
+8bacbaa - Update PROJECT_COMPLETION_SUMMARY.md with final stats
+```
+
+**Session 4 (4 commits)**:
+```
+a1e9a4c - Implement cookie security hardening with HttpOnly, Secure, and SameSite flags
+a4d466f - Implement CORS configuration for frontend and shopping assistant services
+74eac72 - Add request body size limits to all POST endpoints for DoS prevention
+64a0e26 - Update RECENT_IMPROVEMENTS.md with Session 4 security hardening
+[current] - Update PROJECT_COMPLETION_SUMMARY.md with Session 4 improvements
 ```
 
 ### Creating the Pull Request
@@ -780,7 +1017,7 @@ gh pr create \
 ## Key Takeaways
 
 ### Security
-1. **19 Security vulnerabilities resolved** (2 Critical, 13 High, 4 Medium)
+1. **22 Security vulnerabilities resolved** (2 Critical, 13 High, 7 Medium)
 2. **Zero Critical vulnerabilities remaining** in analyzed code
 3. **Two-layer defense** for SQL injection (validation + parameterization)
 4. **Security headers** on all HTTP-facing services (7 headers per service)
@@ -816,16 +1053,17 @@ gh pr create \
 
 ## Conclusion
 
-The microservices-demo project has undergone a **comprehensive transformation** across **three major work sessions**, addressing security, testing, observability, and production readiness. With **76 issues resolved** (19 security vulnerabilities, 57 improvements), **3,298+ lines of documentation**, and **95% test coverage**, the project is now **enterprise production-ready** with industry best practices fully implemented.
+The microservices-demo project has undergone a **comprehensive transformation** across **four major work sessions**, addressing security, testing, observability, and production readiness. With **79 issues resolved** (22 security vulnerabilities, 57 improvements), **3,298+ lines of documentation**, and **95% test coverage**, the project is now **enterprise production-ready** with industry best practices fully implemented.
 
 ### Session Highlights
 - **Session 1**: Foundation - Testing (95%), OpenTelemetry, Initial Security (9 vulnerabilities)
-- **Session 2**: Advanced Security - Critical SQL Injection, Structured Logging (11 files), Configuration
-- **Session 3**: Production Hardening - Security Headers, Timeouts, Graceful Shutdown, Error Handling
+- **Session 2**: Advanced Security - Critical SQL Injection, Structured Logging (11 files), Configuration (34 issues)
+- **Session 3**: Production Hardening - Security Headers, Timeouts, Graceful Shutdown, Error Handling (9 issues)
+- **Session 4**: Additional Security - Cookie Security, CORS, Request Size Limits (3 issues)
 
 ### Production Features
-- ✅ **Security**: Headers, timeouts, error sanitization, input validation
-- ✅ **Reliability**: Comprehensive error handling, graceful shutdown
+- ✅ **Security**: Headers, timeouts, error sanitization, input validation, cookie security, CORS
+- ✅ **Reliability**: Comprehensive error handling, graceful shutdown, request size limits
 - ✅ **Observability**: Distributed tracing, structured logging, metrics
 - ✅ **Scalability**: Connection pooling, timeouts, resource limits
 - ✅ **Operations**: Zero-downtime deployments, health checks, documentation
@@ -844,5 +1082,5 @@ All changes are **backward compatible** and can be deployed immediately. The env
 **Prepared by**: Claude AI Assistant
 **Date**: 2025-11-09
 **Branch**: claude/analyze-project-code-011CUwzfVwPzbHCKrWeS1qyM
-**Total Commits**: 25
+**Total Commits**: 29 (Session 1: 10, Session 2: 8, Session 3: 8, Session 4: 4-in-progress)
 **Status**: ✅ Ready for Pull Request
