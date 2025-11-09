@@ -18,6 +18,10 @@ import logging
 import os
 import signal
 import sys
+import time
+import threading
+from collections import defaultdict
+from typing import Dict, List, Tuple
 
 from google.cloud import secretmanager_v1
 from urllib.parse import unquote, urlparse
@@ -50,6 +54,96 @@ EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "models/embedding-001")
 MAX_MESSAGE_LENGTH = 1000
 MAX_IMAGE_URL_LENGTH = 2048
 
+# Rate limiting configuration
+# LLM API calls are expensive, so use aggressive rate limiting
+# Default: 5 requests per minute per IP (0.083 req/sec)
+RATE_LIMIT_REQUESTS = int(os.environ.get('RATE_LIMIT_REQUESTS', '5'))
+RATE_LIMIT_WINDOW = int(os.environ.get('RATE_LIMIT_WINDOW', '60'))  # seconds
+
+class RateLimiter:
+    """
+    Simple in-memory rate limiter using sliding window algorithm.
+    Tracks request timestamps per IP address.
+    """
+
+    def __init__(self, max_requests: int = RATE_LIMIT_REQUESTS, window_seconds: int = RATE_LIMIT_WINDOW):
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self.requests: Dict[str, List[float]] = defaultdict(list)
+        self.lock = threading.Lock()
+
+        # Start cleanup thread to remove old entries
+        self.cleanup_thread = threading.Thread(target=self._cleanup_old_entries, daemon=True)
+        self.cleanup_thread.start()
+
+    def is_allowed(self, ip_address: str) -> Tuple[bool, int]:
+        """
+        Check if request from IP is allowed.
+        Returns: (allowed: bool, remaining_requests: int)
+        """
+        with self.lock:
+            now = time.time()
+            cutoff = now - self.window_seconds
+
+            # Remove old requests outside the window
+            if ip_address in self.requests:
+                self.requests[ip_address] = [
+                    timestamp for timestamp in self.requests[ip_address]
+                    if timestamp > cutoff
+                ]
+
+            current_count = len(self.requests[ip_address])
+
+            if current_count < self.max_requests:
+                self.requests[ip_address].append(now)
+                remaining = self.max_requests - current_count - 1
+                return True, remaining
+            else:
+                return False, 0
+
+    def _cleanup_old_entries(self):
+        """Periodically clean up old IP addresses that haven't made requests recently."""
+        while True:
+            time.sleep(300)  # Run every 5 minutes
+
+            with self.lock:
+                now = time.time()
+                cutoff = now - (self.window_seconds * 2)  # Remove IPs inactive for 2x window
+
+                ips_to_remove = []
+                for ip, timestamps in self.requests.items():
+                    # Remove old timestamps
+                    timestamps = [t for t in timestamps if t > cutoff]
+
+                    if not timestamps:
+                        ips_to_remove.append(ip)
+                    else:
+                        self.requests[ip] = timestamps
+
+                for ip in ips_to_remove:
+                    del self.requests[ip]
+
+                if ips_to_remove:
+                    logger.debug(f"Rate limiter cleanup: removed {len(ips_to_remove)} inactive IPs")
+
+# Global rate limiter instance
+rate_limiter = RateLimiter()
+
+def get_client_ip() -> str:
+    """Extract real client IP from request headers (handles proxies)."""
+    # Check X-Forwarded-For header (standard for proxies)
+    if request.headers.get('X-Forwarded-For'):
+        # X-Forwarded-For can contain multiple IPs, take the first one
+        ips = request.headers.get('X-Forwarded-For').split(',')
+        return ips[0].strip()
+
+    # Check X-Real-IP header (used by some proxies)
+    if request.headers.get('X-Real-IP'):
+        return request.headers.get('X-Real-IP').strip()
+
+    # Fallback to remote_addr
+    return request.remote_addr or '0.0.0.0'
+
 secret_manager_client = secretmanager_v1.SecretManagerServiceClient()
 secret_name = secret_manager_client.secret_version_path(project=PROJECT_ID, secret=ALLOYDB_SECRET_NAME, secret_version="latest")
 secret_request = secretmanager_v1.AccessSecretVersionRequest(name=secret_name)
@@ -79,6 +173,51 @@ vectorstore = AlloyDBVectorStore.create_sync(
 
 def create_app():
     app = Flask(__name__)
+
+    # Rate limiting: Check before processing any request
+    @app.before_request
+    def check_rate_limit():
+        """Apply rate limiting to all requests to prevent API abuse."""
+        # Skip rate limiting if explicitly disabled
+        if os.environ.get('DISABLE_RATE_LIMITING') == 'true':
+            return None
+
+        # Skip rate limiting for health checks and OPTIONS
+        if request.path == '/_healthz' or request.method == 'OPTIONS':
+            return None
+
+        # Get client IP
+        client_ip = get_client_ip()
+
+        # Check rate limit
+        allowed, remaining = rate_limiter.is_allowed(client_ip)
+
+        if not allowed:
+            # Log security event for rate limit exceeded
+            logger.warning(
+                f"Rate limit exceeded - IP: {client_ip}, "
+                f"Path: {request.path}, Method: {request.method}, "
+                f"security_event: rate_limit_exceeded"
+            )
+
+            # Return 429 Too Many Requests with headers
+            response = jsonify({
+                'error': 'Too Many Requests - Rate limit exceeded. Please try again later.',
+                'retry_after': RATE_LIMIT_WINDOW
+            })
+            response.status_code = 429
+            response.headers['X-RateLimit-Limit'] = str(RATE_LIMIT_REQUESTS)
+            response.headers['X-RateLimit-Remaining'] = '0'
+            response.headers['X-RateLimit-Reset'] = str(int(time.time()) + RATE_LIMIT_WINDOW)
+            response.headers['Retry-After'] = str(RATE_LIMIT_WINDOW)
+            return response
+
+        # Add rate limit headers to successful requests (will be added in after_request)
+        # Store in g object for access in after_request
+        from flask import g
+        g.rate_limit_remaining = remaining
+
+        return None
 
     # Add security headers and CORS configuration to all responses
     @app.after_request
@@ -116,6 +255,14 @@ def create_app():
             response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
             response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
             response.headers['Access-Control-Max-Age'] = '3600'
+
+        # Add rate limit headers for informational purposes
+        if os.environ.get('DISABLE_RATE_LIMITING') != 'true':
+            from flask import g
+            if hasattr(g, 'rate_limit_remaining'):
+                response.headers['X-RateLimit-Limit'] = str(RATE_LIMIT_REQUESTS)
+                response.headers['X-RateLimit-Remaining'] = str(g.rate_limit_remaining)
+                response.headers['X-RateLimit-Reset'] = str(int(time.time()) + RATE_LIMIT_WINDOW)
 
         return response
 

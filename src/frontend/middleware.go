@@ -18,11 +18,14 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/time/rate"
 )
 
 type ctxKeyLog struct{}
@@ -186,6 +189,148 @@ func isSecureContext(r *http.Request) bool {
 		return true
 	}
 	return false
+}
+
+// visitor tracks rate limiting state for a single IP address
+type visitor struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
+}
+
+// rateLimiter manages per-IP rate limiting
+type rateLimiter struct {
+	visitors map[string]*visitor
+	mu       sync.RWMutex
+	rate     rate.Limit // requests per second
+	burst    int        // maximum burst size
+}
+
+// newRateLimiter creates a new rate limiter with configurable limits
+func newRateLimiter() *rateLimiter {
+	// Default: 100 requests per minute (1.67 req/sec), burst of 20
+	rps := 1.67
+	burst := 20
+
+	// Check for custom rate limit configuration
+	if rateStr := os.Getenv("RATE_LIMIT_RPS"); rateStr != "" {
+		if r, err := strconv.ParseFloat(rateStr, 64); err == nil && r > 0 {
+			rps = r
+		}
+	}
+	if burstStr := os.Getenv("RATE_LIMIT_BURST"); burstStr != "" {
+		if b, err := strconv.Atoi(burstStr); err == nil && b > 0 {
+			burst = b
+		}
+	}
+
+	rl := &rateLimiter{
+		visitors: make(map[string]*visitor),
+		rate:     rate.Limit(rps),
+		burst:    burst,
+	}
+
+	// Start cleanup goroutine to remove old visitors
+	go rl.cleanupVisitors()
+
+	return rl
+}
+
+// getVisitor retrieves or creates a rate limiter for an IP address
+func (rl *rateLimiter) getVisitor(ip string) *rate.Limiter {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	v, exists := rl.visitors[ip]
+	if !exists {
+		limiter := rate.NewLimiter(rl.rate, rl.burst)
+		rl.visitors[ip] = &visitor{limiter, time.Now()}
+		return limiter
+	}
+
+	v.lastSeen = time.Now()
+	return v.limiter
+}
+
+// cleanupVisitors periodically removes visitors that haven't been seen recently
+func (rl *rateLimiter) cleanupVisitors() {
+	for {
+		time.Sleep(time.Minute)
+
+		rl.mu.Lock()
+		for ip, v := range rl.visitors {
+			if time.Since(v.lastSeen) > 3*time.Minute {
+				delete(rl.visitors, ip)
+			}
+		}
+		rl.mu.Unlock()
+	}
+}
+
+// Global rate limiter instance
+var globalRateLimiter = newRateLimiter()
+
+// rateLimitMiddleware implements per-IP rate limiting to prevent abuse
+func rateLimitMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip rate limiting if disabled
+		if os.Getenv("DISABLE_RATE_LIMITING") == "true" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Get client IP address
+		ip := getClientIP(r)
+
+		// Get rate limiter for this IP
+		limiter := globalRateLimiter.getVisitor(ip)
+
+		// Check if request is allowed
+		if !limiter.Allow() {
+			// Log security event for rate limit exceeded
+			if log, ok := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger); ok {
+				log.WithFields(logrus.Fields{
+					"client_ip":      ip,
+					"path":           r.URL.Path,
+					"method":         r.Method,
+					"security_event": "rate_limit_exceeded",
+				}).Warn("Rate limit exceeded")
+			}
+
+			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(globalRateLimiter.burst))
+			w.Header().Set("X-RateLimit-Remaining", "0")
+			w.Header().Set("Retry-After", "60") // Suggest retry after 60 seconds
+			http.Error(w, "Too Many Requests - Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// getClientIP extracts the real client IP from the request
+// Handles X-Forwarded-For and X-Real-IP headers for proxied requests
+func getClientIP(r *http.Request) string {
+	// Check X-Forwarded-For header (standard for proxies)
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// X-Forwarded-For can contain multiple IPs, take the first one
+		ips := strings.Split(xff, ",")
+		if len(ips) > 0 {
+			return strings.TrimSpace(ips[0])
+		}
+	}
+
+	// Check X-Real-IP header (used by some proxies)
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+
+	// Fallback to RemoteAddr
+	// RemoteAddr is in format "IP:port", extract just the IP
+	ip := r.RemoteAddr
+	if idx := strings.LastIndex(ip, ":"); idx != -1 {
+		ip = ip[:idx]
+	}
+	return ip
 }
 
 func ensureSessionID(next http.Handler) http.HandlerFunc {

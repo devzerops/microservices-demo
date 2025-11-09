@@ -166,6 +166,7 @@ func main() {
 
 	var handler http.Handler = r
 	handler = &logHandler{log: log, next: handler}     // add logging
+	handler = rateLimitMiddleware(handler)             // add rate limiting (DoS protection)
 	handler = ensureSessionID(handler)                 // add session ID
 	handler = securityHeadersMiddleware(handler)       // add security headers
 	handler = corsMiddleware(handler)                  // add CORS support
