@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"cloud.google.com/go/profiler"
@@ -163,12 +165,74 @@ func main() {
 	r.HandleFunc(baseUrl + "/bot", svc.chatBotHandler).Methods(http.MethodPost)
 
 	var handler http.Handler = r
-	handler = &logHandler{log: log, next: handler}     // add logging
-	handler = ensureSessionID(handler)                 // add session ID
-	handler = otelhttp.NewHandler(handler, "frontend") // add OTel tracing
+	handler = &logHandler{log: log, next: handler}       // add logging
+	handler = ensureSessionID(handler)                   // add session ID
+	handler = securityHeadersMiddleware(handler)         // add security headers
+	handler = otelhttp.NewHandler(handler, "frontend")   // add OTel tracing
 
-	log.Infof("starting server on " + addr + ":" + srvPort)
-	log.Fatal(http.ListenAndServe(addr+":"+srvPort, handler))
+	// Configure HTTP server with timeouts
+	srv := &http.Server{
+		Addr:              addr + ":" + srvPort,
+		Handler:           handler,
+		ReadTimeout:       10 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1 MB
+	}
+
+	// Start server in goroutine for graceful shutdown
+	go func() {
+		log.Infof("starting server on %s:%s", addr, srvPort)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("server failed to start: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal to gracefully shutdown the server
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Info("shutting down server...")
+
+	// Create shutdown context with timeout
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Close gRPC connections
+	log.Info("closing gRPC connections...")
+	if svc.currencySvcConn != nil {
+		svc.currencySvcConn.Close()
+	}
+	if svc.productCatalogSvcConn != nil {
+		svc.productCatalogSvcConn.Close()
+	}
+	if svc.cartSvcConn != nil {
+		svc.cartSvcConn.Close()
+	}
+	if svc.recommendationSvcConn != nil {
+		svc.recommendationSvcConn.Close()
+	}
+	if svc.shippingSvcConn != nil {
+		svc.shippingSvcConn.Close()
+	}
+	if svc.checkoutSvcConn != nil {
+		svc.checkoutSvcConn.Close()
+	}
+	if svc.adSvcConn != nil {
+		svc.adSvcConn.Close()
+	}
+	if svc.collectorConn != nil {
+		svc.collectorConn.Close()
+	}
+
+	// Shutdown HTTP server
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Errorf("server forced to shutdown: %v", err)
+	}
+
+	log.Info("server exited gracefully")
 }
 func initStats(log logrus.FieldLogger) {
 	log.Info("Stats/Metrics collection initialized - Using OpenTelemetry default provider")

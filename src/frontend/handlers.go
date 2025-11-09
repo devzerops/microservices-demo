@@ -588,7 +588,13 @@ func (fe *frontendServer) chooseAd(ctx context.Context, ctxKeys []string, log lo
 
 func renderHTTPError(log logrus.FieldLogger, r *http.Request, w http.ResponseWriter, err error, code int) {
 	log.WithField("error", err).Error("request error")
-	errMsg := fmt.Sprintf("%+v", err)
+
+	// Sanitize error messages for production
+	// Only show detailed errors in development/debug mode
+	errMsg := "An error occurred while processing your request"
+	if os.Getenv("ENV") == "development" || os.Getenv("ENABLE_DEBUG_ERRORS") == "true" {
+		errMsg = fmt.Sprintf("%+v", err)
+	}
 
 	w.WriteHeader(code)
 

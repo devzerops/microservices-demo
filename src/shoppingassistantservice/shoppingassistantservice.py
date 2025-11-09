@@ -16,9 +16,11 @@
 
 import logging
 import os
+import signal
+import sys
 
 from google.cloud import secretmanager_v1
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse
 from langchain_core.messages import HumanMessage
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from flask import Flask, request, jsonify
@@ -43,6 +45,10 @@ ALLOYDB_SECRET_NAME = os.environ["ALLOYDB_SECRET_NAME"]
 # LLM Model configuration with defaults
 LLM_MODEL = os.environ.get("LLM_MODEL", "gemini-1.5-flash")
 EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "models/embedding-001")
+
+# Input validation limits
+MAX_MESSAGE_LENGTH = 1000
+MAX_IMAGE_URL_LENGTH = 2048
 
 secret_manager_client = secretmanager_v1.SecretManagerServiceClient()
 secret_name = secret_manager_client.secret_version_path(project=PROJECT_ID, secret=ALLOYDB_SECRET_NAME, secret_version="latest")
@@ -74,6 +80,23 @@ vectorstore = AlloyDBVectorStore.create_sync(
 def create_app():
     app = Flask(__name__)
 
+    # Add security headers to all responses
+    @app.after_request
+    def set_security_headers(response):
+        # Prevent clickjacking attacks
+        response.headers['X-Frame-Options'] = 'DENY'
+        # Prevent MIME-type sniffing
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        # Enable HSTS for HTTPS
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        # Content Security Policy
+        response.headers['Content-Security-Policy'] = "default-src 'self'"
+        # Referrer Policy
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        # XSS Protection for older browsers
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        return response
+
     @app.route("/", methods=['POST'])
     def talkToGemini():
         logger.info("Beginning RAG call")
@@ -94,40 +117,66 @@ def create_app():
 
         prompt = request.json['message']
 
-        # Validate message is not empty
+        # Validate message is not empty and within length limit
         if not prompt or not isinstance(prompt, str):
             return jsonify({'error': 'message must be a non-empty string'}), 400
 
+        if len(prompt) > MAX_MESSAGE_LENGTH:
+            return jsonify({'error': f'message too long (max {MAX_MESSAGE_LENGTH} characters)'}), 400
+
         prompt = unquote(prompt)
 
-        # Validate image URL is not empty
+        # Validate image URL is not empty, within length limit, and is a valid URL
         image_url = request.json['image']
         if not image_url or not isinstance(image_url, str):
             return jsonify({'error': 'image must be a non-empty string (URL)'}), 400
 
+        if len(image_url) > MAX_IMAGE_URL_LENGTH:
+            return jsonify({'error': f'image URL too long (max {MAX_IMAGE_URL_LENGTH} characters)'}), 400
+
+        # Validate URL format and scheme
+        try:
+            parsed_url = urlparse(image_url)
+            if not all([parsed_url.scheme, parsed_url.netloc]):
+                return jsonify({'error': 'Invalid image URL format'}), 400
+            if parsed_url.scheme not in ['http', 'https']:
+                return jsonify({'error': 'Image URL must use HTTP or HTTPS'}), 400
+        except Exception as e:
+            logger.error(f"URL validation failed: {str(e)}")
+            return jsonify({'error': 'Invalid image URL'}), 400
+
         # Step 1 – Get a room description from Gemini-vision-pro
-        llm_vision = ChatGoogleGenerativeAI(model=LLM_MODEL)
-        message = HumanMessage(
-            content=[
-                {
-                    "type": "text",
-                    "text": "You are a professional interior designer, give me a detailed description of the style of the room in this image",
-                },
-                {"type": "image_url", "image_url": image_url},
-            ]
-        )
-        response = llm_vision.invoke([message])
-        logger.info("Description step completed")
-        logger.debug(f"LLM response: {response}")
-        description_response = response.content
+        try:
+            llm_vision = ChatGoogleGenerativeAI(model=LLM_MODEL, timeout=30)
+            message = HumanMessage(
+                content=[
+                    {
+                        "type": "text",
+                        "text": "You are a professional interior designer, give me a detailed description of the style of the room in this image",
+                    },
+                    {"type": "image_url", "image_url": image_url},
+                ]
+            )
+            response = llm_vision.invoke([message])
+            logger.info("Description step completed")
+            logger.debug(f"LLM response: {response}")
+            description_response = response.content
+        except Exception as e:
+            logger.error(f"LLM vision API failed: {str(e)}")
+            return jsonify({'error': 'Failed to process image'}), 500
 
         # Step 2 – Similarity search with the description & user prompt
         vector_search_prompt = f""" This is the user's request: {prompt} Find the most relevant items for that prompt, while matching style of the room described here: {description_response} """
         logger.debug(f"Vector search prompt: {vector_search_prompt}")
 
-        docs = vectorstore.similarity_search(vector_search_prompt)
-        logger.info(f"Vector search completed for description")
-        logger.info(f"Retrieved {len(docs)} documents")
+        try:
+            docs = vectorstore.similarity_search(vector_search_prompt)
+            logger.info(f"Vector search completed for description")
+            logger.info(f"Retrieved {len(docs)} documents")
+        except Exception as e:
+            logger.error(f"Vector search failed: {str(e)}")
+            return jsonify({'error': 'Search temporarily unavailable'}), 503
+
         # Prepare relevant documents for inclusion in final prompt
         relevant_docs = ""
         for doc in docs:
@@ -136,23 +185,50 @@ def create_app():
             relevant_docs += str(doc_details) + ", "
 
         # Step 3 – Tie it all together by augmenting our call to Gemini-pro
-        llm = ChatGoogleGenerativeAI(model=LLM_MODEL)
-        design_prompt = (
-            f" You are an interior designer that works for Online Boutique. You are tasked with providing recommendations to a customer on what they should add to a given room from our catalog. This is the description of the room: \n"
-            f"{description_response} Here are a list of products that are relevant to it: {relevant_docs} Specifically, this is what the customer has asked for, see if you can accommodate it: {prompt} Start by repeating a brief description of the room's design to the customer, then provide your recommendations. Do your best to pick the most relevant item out of the list of products provided, but if none of them seem relevant, then say that instead of inventing a new product. At the end of the response, add a list of the IDs of the relevant products in the following format for the top 3 results: [<first product ID>], [<second product ID>], [<third product ID>] ")
-        logger.info("Generating final design recommendations")
-        logger.debug(f"Design prompt: {design_prompt}")
-        design_response = llm.invoke(
-            design_prompt
-        )
+        try:
+            llm = ChatGoogleGenerativeAI(model=LLM_MODEL, timeout=30)
+            design_prompt = (
+                f" You are an interior designer that works for Online Boutique. You are tasked with providing recommendations to a customer on what they should add to a given room from our catalog. This is the description of the room: \n"
+                f"{description_response} Here are a list of products that are relevant to it: {relevant_docs} Specifically, this is what the customer has asked for, see if you can accommodate it: {prompt} Start by repeating a brief description of the room's design to the customer, then provide your recommendations. Do your best to pick the most relevant item out of the list of products provided, but if none of them seem relevant, then say that instead of inventing a new product. At the end of the response, add a list of the IDs of the relevant products in the following format for the top 3 results: [<first product ID>], [<second product ID>], [<third product ID>] ")
+            logger.info("Generating final design recommendations")
+            logger.debug(f"Design prompt: {design_prompt}")
+            design_response = llm.invoke(
+                design_prompt
+            )
+        except Exception as e:
+            logger.error(f"LLM generation API failed: {str(e)}")
+            return jsonify({'error': 'Failed to generate recommendations'}), 500
 
         data = {'content': design_response.content}
         return data
 
     return app
 
+def signal_handler(sig, frame):
+    """Graceful shutdown handler"""
+    logger.info(f"Received signal {sig}, initiating graceful shutdown...")
+    try:
+        # Close database connections
+        engine.dispose()
+        logger.info("Database connections closed")
+    except Exception as e:
+        logger.error(f"Error during shutdown: {str(e)}")
+    logger.info("Shutdown complete")
+    sys.exit(0)
+
 if __name__ == "__main__":
+    # Register signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
     # Create an instance of flask server when called directly
     app = create_app()
     port = int(os.environ.get('PORT', 8080))
+
+    logger.info(f"Starting shopping assistant service on port {port}")
+    logger.info(f"Using LLM model: {LLM_MODEL}")
+    logger.info(f"Using embedding model: {EMBEDDING_MODEL}")
+
+    # In production, use a WSGI server like gunicorn:
+    # gunicorn --bind 0.0.0.0:8080 --workers 4 --timeout 60 --graceful-timeout 30 shoppingassistantservice:app
     app.run(host='0.0.0.0', port=port)
