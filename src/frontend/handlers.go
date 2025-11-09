@@ -651,9 +651,14 @@ func cartSize(c []*pb.CartItem) int {
 	return cartSize
 }
 
+const (
+	// nanosPerCent converts nanos to cents for currency display (2 decimal places)
+	nanosPerCent = 10000000
+)
+
 func renderMoney(money pb.Money) string {
 	currencyLogo := renderCurrencyLogo(money.GetCurrencyCode())
-	return fmt.Sprintf("%s%d.%02d", currencyLogo, money.GetUnits(), money.GetNanos()/10000000)
+	return fmt.Sprintf("%s%d.%02d", currencyLogo, money.GetUnits(), money.GetNanos()/nanosPerCent)
 }
 
 func renderCurrencyLogo(currencyCode string) string {

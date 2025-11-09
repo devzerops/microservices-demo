@@ -24,6 +24,9 @@ const (
 	nanosMin = -999999999
 	nanosMax = +999999999
 	nanosMod = 1000000000
+	// nanosPerCent is used to convert nanos to cents (2 decimal places)
+	// 1 billion nanos / 100 cents = 10 million nanos per cent
+	nanosPerCent = 10000000
 )
 
 var (

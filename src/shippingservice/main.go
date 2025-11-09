@@ -133,11 +133,13 @@ func (s *server) GetQuote(ctx context.Context, in *pb.GetQuoteRequest) (*pb.GetQ
 	quote := CreateQuoteFromCount(0)
 
 	// 2. Generate a response.
+	// Convert cents to nanos (1 cent = 10,000,000 nanos for 2 decimal place precision)
+	const nanosPerCent = 10000000
 	return &pb.GetQuoteResponse{
 		CostUsd: &pb.Money{
 			CurrencyCode: "USD",
 			Units:        int64(quote.Dollars),
-			Nanos:        int32(quote.Cents * 10000000)},
+			Nanos:        int32(quote.Cents * nanosPerCent)},
 	}, nil
 
 }
