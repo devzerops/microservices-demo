@@ -18,8 +18,7 @@ import logging
 import sys
 from pythonjsonlogger import jsonlogger
 
-# Shared logging utilities for Python microservices
-# This class provides consistent JSON logging across all services
+
 class CustomJsonFormatter(jsonlogger.JsonFormatter):
   """Custom JSON formatter for structured logging across microservices."""
 
@@ -31,6 +30,7 @@ class CustomJsonFormatter(jsonlogger.JsonFormatter):
       log_record['severity'] = log_record['severity'].upper()
     else:
       log_record['severity'] = record.levelname
+
 
 def getJSONLogger(name):
   """

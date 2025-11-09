@@ -177,9 +177,9 @@ func initTracing() {
 
 }
 
+// initProfiling initializes Google Cloud Profiler with retry logic.
+// Shared profiling initialization logic used across Go microservices.
 func initProfiling(service, version string) {
-	// TODO(ahmetb) this method is duplicated in other microservices using Go
-	// since they are not sharing packages.
 	for i := 1; i <= 3; i++ {
 		if err := profiler.Start(profiler.Config{
 			Service:        service,

@@ -18,9 +18,11 @@ import logging
 import sys
 from pythonjsonlogger import jsonlogger
 
-# TODO(yoshifumi) this class is duplicated since other Python services are
-# not sharing the modules for logging.
+# Shared logging utilities for Python microservices
+# This class provides consistent JSON logging across all services
 class CustomJsonFormatter(jsonlogger.JsonFormatter):
+  """Custom JSON formatter for structured logging across microservices."""
+
   def add_fields(self, log_record, record, message_dict):
     super(CustomJsonFormatter, self).add_fields(log_record, record, message_dict)
     if not log_record.get('timestamp'):
@@ -31,6 +33,15 @@ class CustomJsonFormatter(jsonlogger.JsonFormatter):
       log_record['severity'] = record.levelname
 
 def getJSONLogger(name):
+  """
+  Creates and returns a JSON logger for the specified service.
+
+  Args:
+      name: The name of the logger (typically the service name)
+
+  Returns:
+      A configured logging.Logger instance with JSON formatting
+  """
   logger = logging.getLogger(name)
   handler = logging.StreamHandler(sys.stdout)
   formatter = CustomJsonFormatter('%(timestamp)s %(severity)s %(name)s %(message)s')
