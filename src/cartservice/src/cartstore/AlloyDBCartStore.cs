@@ -26,6 +26,7 @@ namespace cartservice.cartstore
     {
         private readonly string tableName;
         private readonly string connectionString;
+        private readonly string readConnectionString;
 
         public AlloyDBCartStore(IConfiguration configuration)
         {
@@ -38,13 +39,14 @@ namespace cartservice.cartstore
             AccessSecretVersionResponse result = client.AccessSecretVersion(secretVersionName);
             // Convert the payload to a string. Payloads are bytes by default.
             string alloyDBPassword = result.Payload.Data.ToStringUtf8().TrimEnd('\r', '\n');
-        
-            // TODO: Create a separate user for connecting within the application
-            // rather than using our superuser
-            string alloyDBUser = "postgres";
+
+            // Use dedicated application user instead of superuser for least privilege access
+            // Default to "postgres" for backward compatibility, but should be configured
+            // with a dedicated user (e.g., "cartservice_user") in production
+            string alloyDBUser = configuration["ALLOYDB_USER"] ?? "postgres";
             string databaseName = configuration["ALLOYDB_DATABASE_NAME"];
-            // TODO: Consider splitting workloads into read vs. write and take
-            // advantage of the AlloyDB read pools
+
+            // Primary connection string for write operations
             string primaryIPAddress = configuration["ALLOYDB_PRIMARY_IP"];
             connectionString = "Host="          +
                                primaryIPAddress +
@@ -54,6 +56,28 @@ namespace cartservice.cartstore
                                alloyDBPassword  +
                                ";Database="     +
                                databaseName;
+
+            // Optional: Read replica connection for read-heavy workloads
+            // If ALLOYDB_READ_IP is configured, read operations can be directed to read pool
+            // This improves performance and reduces load on the primary instance
+            string readIPAddress = configuration["ALLOYDB_READ_IP"];
+            if (!string.IsNullOrEmpty(readIPAddress))
+            {
+                readConnectionString = "Host="          +
+                                      readIPAddress    +
+                                      ";Username="     +
+                                      alloyDBUser      +
+                                      ";Password="     +
+                                      alloyDBPassword  +
+                                      ";Database="     +
+                                      databaseName;
+                Console.WriteLine($"AlloyDB read pool configured at {readIPAddress}");
+            }
+            else
+            {
+                // If no read replica configured, use primary for all operations
+                readConnectionString = connectionString;
+            }
 
             tableName = configuration["ALLOYDB_TABLE_NAME"];
         }
@@ -101,7 +125,8 @@ namespace cartservice.cartstore
             cart.UserId = userId;
             try
             {
-                await using var dataSource = NpgsqlDataSource.Create(connectionString);
+                // Use read connection for read-only operations to leverage read pool
+                await using var dataSource = NpgsqlDataSource.Create(readConnectionString);
 
                 var cartFetchCmd = $"SELECT productId, quantity FROM {tableName} WHERE userId = '{userId}'";
                 var cmd = dataSource.CreateCommand(cartFetchCmd);
