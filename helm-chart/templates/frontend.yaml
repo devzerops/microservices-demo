@@ -130,6 +130,20 @@ spec:
             value: {{ .Values.shoppingAssistantService.create | quote }}
           - name: ENABLE_SINGLE_SHARED_SESSION
             value: {{ .Values.frontend.singleSharedSession | quote }}
+          {{- if .Values.securityFeatures.rateLimiting.enabled }}
+          - name: ENABLE_RATE_LIMITING
+            value: "true"
+          - name: RATE_LIMIT_AI
+            value: {{ .Values.securityFeatures.rateLimiting.aiLimit | quote }}
+          - name: RATE_LIMIT_POST
+            value: {{ .Values.securityFeatures.rateLimiting.postLimit | quote }}
+          - name: RATE_LIMIT_GET
+            value: {{ .Values.securityFeatures.rateLimiting.getLimit | quote }}
+          {{- end }}
+          {{- if .Values.securityFeatures.grpcTls.enabled }}
+          - name: ENABLE_GRPC_TLS
+            value: {{ .Values.securityFeatures.grpcTls.mode | quote }}
+          {{- end }}
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
 ---

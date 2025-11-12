@@ -106,6 +106,10 @@ spec:
         - name: ENABLE_PROFILER
           value: "1"
         {{- end }}
+        {{- if .Values.securityFeatures.grpcTls.enabled }}
+        - name: ENABLE_GRPC_TLS
+          value: {{ .Values.securityFeatures.grpcTls.mode | quote }}
+        {{- end }}
         resources:
           {{- toYaml .Values.checkoutService.resources | nindent 10 }}
 ---
