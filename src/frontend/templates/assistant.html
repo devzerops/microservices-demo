@@ -55,7 +55,6 @@
     var baseString;
     reader.onloadend = function () {
       baseString = reader.result;
-      console.log(baseString);
       image = baseString;
     };
     reader.readAsDataURL(file);
@@ -93,9 +92,7 @@
     }
 
     // Construct and render user message
-    console.log("bot button clicked");
     const message = botinput.value;
-    console.log("message: " + message);
     const usermessage = document.createElement("p");
     const userMessageSpan = document.createElement("span");
     const imageDivElement = document.createElement("div");
@@ -117,7 +114,6 @@
     // Disable send button and input field
     botbutton.disabled = true;
     botinput.disabled = true;
-    console.log("bot is typing");
 
     // Construct and render placeholder bot message
     const botMessage = document.createElement("p");
@@ -142,11 +138,9 @@
       }),
     });
     const responseJson = await response.json();
-    console.log(responseJson);
 
     // Fetch the product IDs from the response
     const extractedIds = extractIdsFromString(responseJson.message);
-    console.log(extractedIds);
 
     // Replace the placeholder bot message text with the real response
     // Making sure to remove any lists or product IDs from that message

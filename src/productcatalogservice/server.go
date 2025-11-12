@@ -101,7 +101,7 @@ func main() {
 	go func() {
 		for {
 			sig := <-sigs
-			log.Printf("Received signal: %s", sig)
+			log.Infof("Received signal: %s", sig)
 			if sig == syscall.SIGUSR1 {
 				reloadCatalog = true
 				log.Infof("Enable catalog reloading")

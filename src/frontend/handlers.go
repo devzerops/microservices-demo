@@ -204,7 +204,7 @@ func (fe *frontendServer) productHandler(w http.ResponseWriter, r *http.Request)
 		"cart_size":       cartSize(cart),
 		"packagingInfo":   packagingInfo,
 	})); err != nil {
-		log.Println(err)
+		log.WithError(err).Error("failed to execute product template")
 	}
 }
 
@@ -317,7 +317,7 @@ func (fe *frontendServer) viewCartHandler(w http.ResponseWriter, r *http.Request
 		"items":            items,
 		"expiration_years": []int{year, year + 1, year + 2, year + 3, year + 4},
 	})); err != nil {
-		log.Println(err)
+		log.WithError(err).Error("failed to execute cart template")
 	}
 }
 
@@ -419,11 +419,12 @@ func (fe *frontendServer) placeOrderHandler(w http.ResponseWriter, r *http.Reque
 		"total_paid":      &totalPaid,
 		"recommendations": recommendations,
 	})); err != nil {
-		log.Println(err)
+		log.WithError(err).Error("failed to execute order template")
 	}
 }
 
 func (fe *frontendServer) assistantHandler(w http.ResponseWriter, r *http.Request) {
+	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
 	currencies, err := fe.getCurrencies(r.Context())
 	if err != nil {
 		renderHTTPError(log, r, w, errors.Wrap(err, "could not retrieve currencies"), http.StatusInternalServerError)
@@ -434,7 +435,7 @@ func (fe *frontendServer) assistantHandler(w http.ResponseWriter, r *http.Reques
 		"show_currency": false,
 		"currencies":    currencies,
 	})); err != nil {
-		log.Println(err)
+		log.WithError(err).Error("failed to execute assistant template")
 	}
 }
 
@@ -586,7 +587,7 @@ func renderHTTPError(log logrus.FieldLogger, r *http.Request, w http.ResponseWri
 		"status_code": code,
 		"status":      http.StatusText(code),
 	})); templateErr != nil {
-		log.Println(templateErr)
+		log.WithError(templateErr).Error("failed to execute error template")
 	}
 }
 
