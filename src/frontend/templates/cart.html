@@ -43,6 +43,7 @@
                         </div>
                         <div class="col-8 pr-md-0 text-right">
                             <form method="POST" action="{{ $.baseUrl }}/cart/empty">
+                                <input type="hidden" name="csrf_token" value="{{$.csrf_token}}" />
                                 <button class="cymbal-button-secondary cart-summary-empty-cart-button" type="submit">
                                     Empty Cart
                                 </button>
@@ -100,6 +101,7 @@
                 <div class="col-lg-5 offset-lg-1 col-xl-4">
 
                     <form class="cart-checkout-form" action="{{ $.baseUrl }}/cart/checkout" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{$.csrf_token}}" />
 
                         <div class="row">
                             <div class="col">
