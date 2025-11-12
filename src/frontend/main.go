@@ -171,6 +171,7 @@ func main() {
 	handler = ensureSessionID(handler)                 // add session ID
 	handler = rateLimitMiddleware(handler)             // add rate limiting
 	handler = csrfProtection(handler)                  // add CSRF protection
+	handler = securityHeadersMiddleware(handler)       // add HTTP security headers
 	handler = otelhttp.NewHandler(handler, "frontend") // add OTel tracing
 
 	// Create HTTP server with graceful shutdown support

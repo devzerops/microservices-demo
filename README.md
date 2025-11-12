@@ -134,6 +134,74 @@ Find **Protocol Buffers Descriptions** at the [`./protos` directory](/protos).
 - **AI assistant using Gemini**: [See these instructions](/kustomize/components/shopping-assistant/README.md) to deploy a Gemini-powered AI assistant that suggests products to purchase based on an image.
 - **And more**: The [`/kustomize` directory](/kustomize) contains instructions for customizing the deployment of Online Boutique with other variations.
 
+## Security Features
+
+This demo includes production-grade security features for learning and practice purposes. All features work out of the box with `helm install` for easy experimentation.
+
+### Enabled by Default
+
+The following security features are automatically active when you deploy:
+
+- **✅ CSRF Protection** - Prevents cross-site request forgery attacks on all POST endpoints
+- **✅ SQL Injection Prevention** - All database queries use parameterized statements
+- **✅ Input Validation** - Validates and sanitizes all user inputs including AI prompts and image URLs
+- **✅ Rate Limiting** - Protects against API abuse and DoS attacks (relaxed limits for demos)
+  - AI Assistant: 20 requests/minute
+  - POST endpoints: 100 requests/minute
+  - GET endpoints: 200 requests/minute
+- **✅ Graceful Shutdown** - Properly cleans up gRPC connections to prevent resource leaks
+- **✅ Secure Logging** - Structured logs with security event tracking
+
+### Optional Features
+
+- **⚪ gRPC TLS Encryption** - Inter-service encryption (requires TLS certificates)
+
+### Configuration
+
+See [Security Features Documentation](./helm-chart/SECURITY_FEATURES.md) for detailed configuration options.
+
+Quick examples:
+
+```bash
+# Deploy with default security (recommended for demos)
+helm install myboutique ./helm-chart
+
+# Adjust rate limits
+helm install myboutique ./helm-chart \
+  --set securityFeatures.rateLimiting.aiLimit=10 \
+  --set securityFeatures.rateLimiting.postLimit=60
+
+# Disable rate limiting
+helm install myboutique ./helm-chart \
+  --set securityFeatures.rateLimiting.enabled=false
+```
+
+### Security Improvements Made
+
+This demo has been enhanced with the following security improvements:
+
+1. **Database Security**
+   - SQL injection prevention via parameterized queries
+   - SSL/TLS connections for AlloyDB and Spanner
+   - Read/write workload separation for better performance
+
+2. **Web Security**
+   - CSRF tokens on all forms with SameSite=Strict cookies
+   - Session-based rate limiting with token bucket algorithm
+   - Input validation on all user-submitted data
+
+3. **Network Security**
+   - Optional gRPC TLS support for inter-service communication
+   - Configurable TLS modes: system CA, custom CA, or skip-verify for testing
+
+4. **Operational Security**
+   - Environment variable validation at startup
+   - Graceful shutdown with proper connection cleanup
+   - Structured logging for security monitoring
+   - Rate limit violation logging for incident response
+
+All security features are implemented with backward compatibility and can be easily enabled or disabled via Helm values.
+
 ## Documentation
 
 - [Development](/docs/development-guide.md) to learn how to run and develop this app locally.
