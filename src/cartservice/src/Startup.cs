@@ -39,7 +39,15 @@ namespace cartservice
             {
                 services.AddStackExchangeRedisCache(options =>
                 {
-                    options.Configuration = redisAddress;
+                    // Enable SSL for production Redis connections
+                    // Format: "host:port,ssl=true,abortConnect=false"
+                    string redisConfig = redisAddress;
+                    if (!redisAddress.Contains("ssl="))
+                    {
+                        redisConfig = $"{redisAddress},ssl=true,abortConnect=false";
+                    }
+                    options.Configuration = redisConfig;
+                    _logger.LogInformation("Redis configured with SSL enabled: {RedisAddress}", redisAddress);
                 });
                 services.AddSingleton<ICartStore, RedisCartStore>();
             }

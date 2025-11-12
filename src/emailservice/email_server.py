@@ -182,8 +182,7 @@ if __name__ == '__main__':
       trace.get_tracer_provider().add_span_processor(
         BatchSpanProcessor(
             OTLPSpanExporter(
-            endpoint = otel_endpoint,
-            insecure = True
+            endpoint = otel_endpoint
           )
         )
       )

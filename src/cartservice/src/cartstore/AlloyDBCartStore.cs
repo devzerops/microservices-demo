@@ -60,6 +60,7 @@ namespace cartservice.cartstore
                                       alloyDBPassword  +
                                       ";Database="     +
                                       databaseName     +
+                                      ";SslMode=Require" +
                                       ";Timeout=30;Command Timeout=30";
 
             // Create primary data source with connection pooling
@@ -79,6 +80,7 @@ namespace cartservice.cartstore
                                               alloyDBPassword  +
                                               ";Database="     +
                                               databaseName     +
+                                              ";SslMode=Require" +
                                               ";Timeout=30;Command Timeout=30";
                 readDataSource = NpgsqlDataSource.Create(readConnectionString);
                 _logger.LogInformation("AlloyDB read pool configured at {ReadIP}", readIPAddress);
