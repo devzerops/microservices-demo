@@ -31,6 +31,33 @@ securityFeatures:
     enabled: false # Set to true only if you have TLS certificates configured
     mode: "false"  # Options: "true"/"system" (production), "skip-verify" (testing), "false" (disabled)
 
+# Istio Service Mesh Features
+# Enable Istio-based resilience and traffic management features
+# Note: Requires Istio to be installed in the cluster. Leave disabled if Istio is not available.
+istio:
+  enabled: false  # Set to true to enable Istio features
+  # Circuit Breaker - prevents cascading failures
+  circuitBreaker:
+    enabled: false  # Enable circuit breaker via DestinationRules
+    # Connection pool settings
+    maxConnections: 100
+    http1MaxPendingRequests: 50
+    http2MaxRequests: 100
+    maxRequestsPerConnection: 2
+    # Outlier detection (circuit breaker logic)
+    consecutiveErrors: 5        # Number of errors before ejecting a pod
+    interval: 30s               # Time between ejection analysis
+    baseEjectionTime: 30s       # Minimum ejection duration
+    maxEjectionPercent: 50      # Maximum percentage of pods that can be ejected
+    minHealthPercent: 50        # Minimum percentage of healthy pods required
+  # Retry - automatic retry with exponential backoff
+  retry:
+    enabled: false  # Enable retry via VirtualServices
+    attempts: 3                 # Number of retry attempts
+    perTryTimeout: 2s           # Timeout for each retry attempt
+    timeout: 10s                # Total timeout including all retries
+    retryOn: "5xx,reset,connect-failure,refused-stream"  # Conditions that trigger retry
+
 images:
   repository: us-central1-docker.pkg.dev/google-samples/microservices-demo
   # Overrides the image tag whose default is the chart appVersion.

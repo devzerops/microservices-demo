@@ -128,6 +128,10 @@ func main() {
 	// Initialize rate limiting
 	initRateLimiting(log)
 
+	// Initialize Prometheus metrics
+	initMetrics()
+	log.Info("Prometheus metrics initialized")
+
 	srvPort := port
 	if os.Getenv("PORT") != "" {
 		srvPort = os.Getenv("PORT")
@@ -162,11 +166,14 @@ func main() {
 	r.HandleFunc(baseUrl + "/assistant", svc.assistantHandler).Methods(http.MethodGet)
 	r.PathPrefix(baseUrl + "/static/").Handler(http.StripPrefix(baseUrl + "/static/", http.FileServer(http.Dir("./static/"))))
 	r.HandleFunc(baseUrl + "/robots.txt", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, "User-agent: *\nDisallow: /") })
-	r.HandleFunc(baseUrl + "/_healthz", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, "ok") })
+	r.HandleFunc(baseUrl + "/_healthz", svc.livenessHandler)
+	r.HandleFunc(baseUrl + "/_readyz", svc.readinessHandler)
+	r.Handle(baseUrl + "/metrics", metricsHandler())
 	r.HandleFunc(baseUrl + "/product-meta/{ids}", svc.getProductByID).Methods(http.MethodGet)
 	r.HandleFunc(baseUrl + "/bot", svc.chatBotHandler).Methods(http.MethodPost)
 
 	var handler http.Handler = r
+	handler = requestIDMiddleware(handler)             // add request ID (Istio compatible)
 	handler = &logHandler{log: log, next: handler}     // add logging
 	handler = ensureSessionID(handler)                 // add session ID
 	handler = rateLimitMiddleware(handler)             // add rate limiting

@@ -87,9 +87,15 @@ func csrfProtection(next http.Handler) http.Handler {
 
 			// Validate token
 			if submittedToken == "" || !strings.EqualFold(submittedToken, token) {
+				// Record CSRF validation failure
+				csrfValidationFailures.Inc()
+
 				http.Error(w, "CSRF token validation failed", http.StatusForbidden)
 				return
 			}
+
+			// Record successful CSRF validation
+			csrfValidationSuccesses.Inc()
 		}
 
 		next.ServeHTTP(w, r)

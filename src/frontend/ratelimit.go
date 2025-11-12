@@ -215,7 +215,12 @@ func rateLimitMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
 		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(resetTime.Unix(), 10))
 
+		// Record metrics
+		endpointType := strings.ToLower(limitType)
 		if !allowed {
+			// Record rate limit exceeded
+			rateLimitExceeded.WithLabelValues(endpointType).Inc()
+
 			// Log rate limit exceeded
 			if log, ok := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger); ok {
 				log.WithFields(logrus.Fields{
@@ -232,6 +237,9 @@ func rateLimitMiddleware(next http.Handler) http.Handler {
 				int(time.Until(resetTime).Seconds())+1), http.StatusTooManyRequests)
 			return
 		}
+
+		// Record allowed request
+		rateLimitAllowed.WithLabelValues(endpointType).Inc()
 
 		next.ServeHTTP(w, r)
 	})
