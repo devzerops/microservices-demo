@@ -115,12 +115,12 @@ func main() {
 	mustMapEnv(&svc.emailSvcAddr, "EMAIL_SERVICE_ADDR")
 	mustMapEnv(&svc.paymentSvcAddr, "PAYMENT_SERVICE_ADDR")
 
-	mustConnGRPC(ctx, &svc.shippingSvcConn, svc.shippingSvcAddr)
-	mustConnGRPC(ctx, &svc.productCatalogSvcConn, svc.productCatalogSvcAddr)
-	mustConnGRPC(ctx, &svc.cartSvcConn, svc.cartSvcAddr)
-	mustConnGRPC(ctx, &svc.currencySvcConn, svc.currencySvcAddr)
-	mustConnGRPC(ctx, &svc.emailSvcConn, svc.emailSvcAddr)
-	mustConnGRPC(ctx, &svc.paymentSvcConn, svc.paymentSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.shippingSvcConn, svc.shippingSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.productCatalogSvcConn, svc.productCatalogSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.cartSvcConn, svc.cartSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.currencySvcConn, svc.currencySvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.emailSvcConn, svc.emailSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.paymentSvcConn, svc.paymentSvcAddr)
 
 	log.Infof("service config: %+v", svc)
 
@@ -242,19 +242,6 @@ func mustMapEnv(target *string, envKey string) {
 		panic(fmt.Sprintf("environment variable %q not set", envKey))
 	}
 	*target = v
-}
-
-func mustConnGRPC(ctx context.Context, conn **grpc.ClientConn, addr string) {
-	var err error
-	ctx, cancel := context.WithTimeout(ctx, time.Second*3)
-	defer cancel()
-	*conn, err = grpc.DialContext(ctx, addr,
-		grpc.WithInsecure(),
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()))
-	if err != nil {
-		panic(errors.Wrapf(err, "grpc: failed to connect %s", addr))
-	}
 }
 
 func (cs *checkoutService) Check(ctx context.Context, req *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {

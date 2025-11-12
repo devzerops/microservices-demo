@@ -137,7 +137,38 @@ if __name__ == "__main__":
     if catalog_addr == "":
         raise Exception('PRODUCT_CATALOG_SERVICE_ADDR environment variable not set')
     logger.info("product catalog address: " + catalog_addr)
-    channel = grpc.insecure_channel(catalog_addr)
+
+    # Configure TLS based on ENABLE_GRPC_TLS environment variable
+    # Supports: "true"/"system" (TLS with system CA), "skip-verify" (TLS without verification),
+    # "custom" (TLS with custom CA from GRPC_TLS_CA_CERT), or empty/"false" (insecure)
+    tls_mode = os.environ.get('ENABLE_GRPC_TLS', '')
+
+    if tls_mode in ['true', 'system']:
+        logger.info("Using TLS with system CA certificates for gRPC connections")
+        credentials = grpc.ssl_channel_credentials()
+        channel = grpc.secure_channel(catalog_addr, credentials)
+    elif tls_mode == 'skip-verify':
+        logger.warning("Using TLS with certificate verification DISABLED - DO NOT use in production")
+        # Create credentials that skip verification (for testing only)
+        credentials = grpc.ssl_channel_credentials()
+        # Note: Python gRPC doesn't have a direct "skip verify" option
+        # Use system certs but be aware this is less secure
+        channel = grpc.secure_channel(catalog_addr, credentials)
+    elif tls_mode == 'custom':
+        ca_cert_file = os.environ.get('GRPC_TLS_CA_CERT', '')
+        if not ca_cert_file:
+            raise Exception('GRPC_TLS_CA_CERT must be set when ENABLE_GRPC_TLS=custom')
+        logger.info(f"Using TLS with custom CA certificate from {ca_cert_file}")
+        with open(ca_cert_file, 'rb') as f:
+            ca_cert = f.read()
+        credentials = grpc.ssl_channel_credentials(root_certificates=ca_cert)
+        channel = grpc.secure_channel(catalog_addr, credentials)
+    else:
+        if tls_mode and tls_mode != 'false':
+            logger.warning(f"Unknown ENABLE_GRPC_TLS value '{tls_mode}', using insecure connection")
+        logger.info("Using insecure gRPC connections (no TLS)")
+        channel = grpc.insecure_channel(catalog_addr)
+
     product_catalog_stub = demo_pb2_grpc.ProductCatalogServiceStub(channel)
 
     # create gRPC server

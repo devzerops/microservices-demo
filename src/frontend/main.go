@@ -139,13 +139,13 @@ func main() {
 	mustMapEnv(&svc.adSvcAddr, "AD_SERVICE_ADDR")
 	mustMapEnv(&svc.shoppingAssistantSvcAddr, "SHOPPING_ASSISTANT_SERVICE_ADDR")
 
-	mustConnGRPC(ctx, &svc.currencySvcConn, svc.currencySvcAddr)
-	mustConnGRPC(ctx, &svc.productCatalogSvcConn, svc.productCatalogSvcAddr)
-	mustConnGRPC(ctx, &svc.cartSvcConn, svc.cartSvcAddr)
-	mustConnGRPC(ctx, &svc.recommendationSvcConn, svc.recommendationSvcAddr)
-	mustConnGRPC(ctx, &svc.shippingSvcConn, svc.shippingSvcAddr)
-	mustConnGRPC(ctx, &svc.checkoutSvcConn, svc.checkoutSvcAddr)
-	mustConnGRPC(ctx, &svc.adSvcConn, svc.adSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.currencySvcConn, svc.currencySvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.productCatalogSvcConn, svc.productCatalogSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.cartSvcConn, svc.cartSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.recommendationSvcConn, svc.recommendationSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.shippingSvcConn, svc.shippingSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.checkoutSvcConn, svc.checkoutSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.adSvcConn, svc.adSvcAddr)
 
 	r := mux.NewRouter()
 	r.HandleFunc(baseUrl + "/", svc.homeHandler).Methods(http.MethodGet, http.MethodHead)
@@ -231,7 +231,7 @@ func initStats(log logrus.FieldLogger) {
 
 func initTracing(log logrus.FieldLogger, ctx context.Context, svc *frontendServer) (*sdktrace.TracerProvider, error) {
 	mustMapEnv(&svc.collectorAddr, "COLLECTOR_SERVICE_ADDR")
-	mustConnGRPC(ctx, &svc.collectorConn, svc.collectorAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.collectorConn, svc.collectorAddr)
 	exporter, err := otlptracegrpc.New(
 		ctx,
 		otlptracegrpc.WithGRPCConn(svc.collectorConn))
@@ -275,17 +275,4 @@ func mustMapEnv(target *string, envKey string) {
 		panic(fmt.Sprintf("environment variable %q not set", envKey))
 	}
 	*target = v
-}
-
-func mustConnGRPC(ctx context.Context, conn **grpc.ClientConn, addr string) {
-	var err error
-	ctx, cancel := context.WithTimeout(ctx, time.Second*3)
-	defer cancel()
-	*conn, err = grpc.DialContext(ctx, addr,
-		grpc.WithInsecure(),
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()))
-	if err != nil {
-		panic(errors.Wrapf(err, "grpc: failed to connect %s", addr))
-	}
 }

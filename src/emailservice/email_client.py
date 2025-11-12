@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import grpc
 
 import demo_pb2
@@ -23,7 +24,30 @@ from logger import getJSONLogger
 logger = getJSONLogger('emailservice-client')
 
 def send_confirmation_email(email, order):
-  channel = grpc.insecure_channel('[::]:8080')
+  # Configure TLS based on ENABLE_GRPC_TLS environment variable
+  # For test client: supports "true"/"system" (TLS), "custom" (custom CA), or empty/"false" (insecure)
+  tls_mode = os.environ.get('ENABLE_GRPC_TLS', '')
+  addr = '[::]:8080'
+
+  if tls_mode in ['true', 'system']:
+    logger.info("Using TLS with system CA certificates")
+    credentials = grpc.ssl_channel_credentials()
+    channel = grpc.secure_channel(addr, credentials)
+  elif tls_mode == 'custom':
+    ca_cert_file = os.environ.get('GRPC_TLS_CA_CERT', '')
+    if ca_cert_file:
+      logger.info(f"Using TLS with custom CA certificate from {ca_cert_file}")
+      with open(ca_cert_file, 'rb') as f:
+        ca_cert = f.read()
+      credentials = grpc.ssl_channel_credentials(root_certificates=ca_cert)
+      channel = grpc.secure_channel(addr, credentials)
+    else:
+      logger.warning("GRPC_TLS_CA_CERT not set, falling back to insecure channel")
+      channel = grpc.insecure_channel(addr)
+  else:
+    logger.info("Using insecure gRPC connection (no TLS)")
+    channel = grpc.insecure_channel(addr)
+
   stub = demo_pb2_grpc.EmailServiceStub(channel)
   try:
     response = stub.SendOrderConfirmation(demo_pb2.SendOrderConfirmationRequest(
