@@ -125,6 +125,9 @@ func main() {
 		log.Info("Profiling disabled.")
 	}
 
+	// Initialize rate limiting
+	initRateLimiting(log)
+
 	srvPort := port
 	if os.Getenv("PORT") != "" {
 		srvPort = os.Getenv("PORT")
@@ -166,6 +169,7 @@ func main() {
 	var handler http.Handler = r
 	handler = &logHandler{log: log, next: handler}     // add logging
 	handler = ensureSessionID(handler)                 // add session ID
+	handler = rateLimitMiddleware(handler)             // add rate limiting
 	handler = csrfProtection(handler)                  // add CSRF protection
 	handler = otelhttp.NewHandler(handler, "frontend") // add OTel tracing
 
