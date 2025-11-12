@@ -17,9 +17,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
+	"time"
 )
 
 /*
@@ -48,10 +49,14 @@ func isPackagingServiceConfigured() bool {
 }
 
 func httpGetPackagingInfo(productId string) (*PackagingInfo, error) {
-	// Make the GET request
+	// Make the GET request with timeout
 	url := packagingServiceUrl + "/" + productId
-	fmt.Println("Requesting packaging info from URL: ", url)
-	resp, err := http.Get(url)
+
+	// Create HTTP client with timeout to prevent indefinite hangs
+	httpClient := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +68,7 @@ func httpGetPackagingInfo(productId string) (*PackagingInfo, error) {
 	}
 
 	// Read the JSON response body
-	responseBody, err := ioutil.ReadAll(resp.Body)
+	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}

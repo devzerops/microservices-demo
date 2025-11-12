@@ -93,7 +93,7 @@ func (fe *frontendServer) homeHandler(w http.ResponseWriter, r *http.Request) {
 	var env = os.Getenv("ENV_PLATFORM")
 	// Only override from env variable if set + valid env
 	if env == "" || stringinSlice(validEnvs, env) == false {
-		fmt.Println("env platform is either empty or invalid")
+		log.Debug("env platform is either empty or invalid, defaulting to local")
 		env = "local"
 	}
 	// Autodetect GCP
@@ -191,7 +191,7 @@ func (fe *frontendServer) productHandler(w http.ResponseWriter, r *http.Request)
 	if isPackagingServiceConfigured() {
 		packagingInfo, err = httpGetPackagingInfo(id)
 		if err != nil {
-			fmt.Println("Failed to obtain product's packaging info:", err)
+			log.WithField("error", err).Warn("Failed to obtain product's packaging info")
 		}
 	}
 
@@ -451,28 +451,40 @@ func (fe *frontendServer) logoutHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (fe *frontendServer) getProductByID(w http.ResponseWriter, r *http.Request) {
+	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
 	id := mux.Vars(r)["ids"]
 	if id == "" {
+		renderHTTPError(log, r, w, errors.New("product id not specified"), http.StatusBadRequest)
 		return
 	}
 
 	p, err := fe.getProduct(r.Context(), id)
 	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "could not retrieve product"), http.StatusInternalServerError)
 		return
 	}
 
 	jsonData, err := json.Marshal(p)
 	if err != nil {
-		fmt.Println(err)
+		renderHTTPError(log, r, w, errors.Wrap(err, "failed to marshal product data"), http.StatusInternalServerError)
 		return
 	}
 
-	w.Write(jsonData)
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	w.Write(jsonData)
 }
 
 func (fe *frontendServer) chatBotHandler(w http.ResponseWriter, r *http.Request) {
 	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
+
+	// Validate Content-Type to prevent malformed requests
+	contentType := r.Header.Get("Content-Type")
+	if contentType != "application/json" {
+		renderHTTPError(log, r, w, errors.New("Content-Type must be application/json"), http.StatusBadRequest)
+		return
+	}
+
 	type Response struct {
 		Message string `json:"message"`
 	}
@@ -509,8 +521,10 @@ func (fe *frontendServer) chatBotHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	fmt.Printf("%+v\n", body)
-	fmt.Printf("%+v\n", res)
+	log.WithFields(logrus.Fields{
+		"response_body":   string(body),
+		"response_status": res.StatusCode,
+	}).Debug("Received response from shopping assistant service")
 
 	err = json.Unmarshal(body, &response)
 	if err != nil {
