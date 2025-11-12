@@ -36,7 +36,7 @@ securityFeatures:
 # Note: Requires Istio to be installed in the cluster. Leave disabled if Istio is not available.
 istio:
   enabled: false  # Set to true to enable Istio features
-  # Circuit Breaker - prevents cascading failures
+  # Circuit Breaker - prevents cascading failures (application-level)
   circuitBreaker:
     enabled: false  # Enable circuit breaker via DestinationRules
     # Connection pool settings
@@ -50,13 +50,52 @@ istio:
     baseEjectionTime: 30s       # Minimum ejection duration
     maxEjectionPercent: 50      # Maximum percentage of pods that can be ejected
     minHealthPercent: 50        # Minimum percentage of healthy pods required
-  # Retry - automatic retry with exponential backoff
+  # Retry - automatic retry with exponential backoff (network-level)
   retry:
     enabled: false  # Enable retry via VirtualServices
     attempts: 3                 # Number of retry attempts
     perTryTimeout: 2s           # Timeout for each retry attempt
     timeout: 10s                # Total timeout including all retries
     retryOn: "5xx,reset,connect-failure,refused-stream"  # Conditions that trigger retry
+
+# Kubernetes Native Resilience Features
+# These work WITH or WITHOUT Istio for defense-in-depth
+# Best Practice: Enable both Kubernetes native + Istio features together
+resilience:
+  # PodDisruptionBudget - ensures availability during voluntary disruptions
+  # Works at infrastructure level (node drains, upgrades)
+  # Complements Istio's circuit breaker which works at application level
+  podDisruptionBudget:
+    enabled: false  # Set to true to enable PDB for zero-downtime deployments
+    minAvailable: 1  # Minimum number of pods that must remain available
+
+  # HorizontalPodAutoscaler - automatic scaling based on load
+  # Works at pod level (scales replicas)
+  # Complements Istio's retry which works at request level
+  horizontalPodAutoscaler:
+    enabled: false  # Set to true to enable auto-scaling
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80  # Optional
+
+  # Enhanced Readiness/Liveness Probes
+  # Works at pod health level (removes unhealthy pods from service)
+  # Complements Istio's outlier detection which works at request level
+  enhancedProbes:
+    enabled: true  # Use improved health checks with dependency verification
+    readiness:
+      initialDelaySeconds: 10
+      periodSeconds: 5
+      timeoutSeconds: 3
+      successThreshold: 1
+      failureThreshold: 3  # Pod marked unready after 3 failures
+    liveness:
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 3
+      successThreshold: 1
+      failureThreshold: 3  # Pod restarted after 3 failures
 
 images:
   repository: us-central1-docker.pkg.dev/google-samples/microservices-demo

@@ -1,0 +1,75 @@
+{{- if .Values.resilience.podDisruptionBudget.enabled }}
+# PodDisruptionBudgets ensure zero-downtime during:
+# - Node maintenance (kubectl drain)
+# - Cluster upgrades
+# - Voluntary disruptions
+#
+# This is a Kubernetes native feature that complements Istio's circuit breaker.
+# While Istio handles application-level failures, PDB handles infrastructure disruptions.
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend-pdb
+  namespace: {{ .Release.Namespace }}
+spec:
+  minAvailable: {{ .Values.resilience.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app: frontend
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: productcatalogservice-pdb
+  namespace: {{ .Release.Namespace }}
+spec:
+  minAvailable: {{ .Values.resilience.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app: productcatalogservice
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: currencyservice-pdb
+  namespace: {{ .Release.Namespace }}
+spec:
+  minAvailable: {{ .Values.resilience.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app: currencyservice
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cartservice-pdb
+  namespace: {{ .Release.Namespace }}
+spec:
+  minAvailable: {{ .Values.resilience.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app: cartservice
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: checkoutservice-pdb
+  namespace: {{ .Release.Namespace }}
+spec:
+  minAvailable: {{ .Values.resilience.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app: checkoutservice
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: recommendationservice-pdb
+  namespace: {{ .Release.Namespace }}
+spec:
+  minAvailable: {{ .Values.resilience.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app: recommendationservice
+{{- end }}
