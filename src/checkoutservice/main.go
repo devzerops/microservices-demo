@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"cloud.google.com/go/profiler"
@@ -140,9 +142,46 @@ func main() {
 
 	pb.RegisterCheckoutServiceServer(srv, svc)
 	healthpb.RegisterHealthServer(srv, svc)
-	log.Infof("starting to listen on tcp: %q", lis.Addr().String())
-	err = srv.Serve(lis)
-	log.Fatal(err)
+
+	// Run gRPC server in goroutine
+	go func() {
+		log.Infof("starting to listen on tcp: %q", lis.Addr().String())
+		if err := srv.Serve(lis); err != nil {
+			log.Fatalf("gRPC server error: %v", err)
+		}
+	}()
+
+	// Setup signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	<-sigChan
+
+	log.Info("Shutdown signal received, cleaning up...")
+
+	// Gracefully stop gRPC server
+	srv.GracefulStop()
+
+	// Close all gRPC client connections
+	if svc.shippingSvcConn != nil {
+		svc.shippingSvcConn.Close()
+	}
+	if svc.productCatalogSvcConn != nil {
+		svc.productCatalogSvcConn.Close()
+	}
+	if svc.cartSvcConn != nil {
+		svc.cartSvcConn.Close()
+	}
+	if svc.currencySvcConn != nil {
+		svc.currencySvcConn.Close()
+	}
+	if svc.emailSvcConn != nil {
+		svc.emailSvcConn.Close()
+	}
+	if svc.paymentSvcConn != nil {
+		svc.paymentSvcConn.Close()
+	}
+
+	log.Info("Cleanup complete, exiting")
 }
 
 func initStats() {

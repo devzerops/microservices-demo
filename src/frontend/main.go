@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"cloud.google.com/go/profiler"
@@ -166,8 +168,61 @@ func main() {
 	handler = ensureSessionID(handler)                 // add session ID
 	handler = otelhttp.NewHandler(handler, "frontend") // add OTel tracing
 
-	log.Infof("starting server on " + addr + ":" + srvPort)
-	log.Fatal(http.ListenAndServe(addr+":"+srvPort, handler))
+	// Create HTTP server with graceful shutdown support
+	srv := &http.Server{
+		Addr:    addr + ":" + srvPort,
+		Handler: handler,
+	}
+
+	// Run HTTP server in goroutine
+	go func() {
+		log.Infof("starting server on " + addr + ":" + srvPort)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("HTTP server error: %v", err)
+		}
+	}()
+
+	// Setup signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	<-sigChan
+
+	log.Info("Shutdown signal received, cleaning up...")
+
+	// Shutdown HTTP server with timeout
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Errorf("HTTP server shutdown error: %v", err)
+	}
+
+	// Close all gRPC connections
+	if svc.currencySvcConn != nil {
+		svc.currencySvcConn.Close()
+	}
+	if svc.productCatalogSvcConn != nil {
+		svc.productCatalogSvcConn.Close()
+	}
+	if svc.cartSvcConn != nil {
+		svc.cartSvcConn.Close()
+	}
+	if svc.recommendationSvcConn != nil {
+		svc.recommendationSvcConn.Close()
+	}
+	if svc.shippingSvcConn != nil {
+		svc.shippingSvcConn.Close()
+	}
+	if svc.checkoutSvcConn != nil {
+		svc.checkoutSvcConn.Close()
+	}
+	if svc.adSvcConn != nil {
+		svc.adSvcConn.Close()
+	}
+	if svc.collectorConn != nil {
+		svc.collectorConn.Close()
+	}
+
+	log.Info("Cleanup complete, exiting")
 }
 func initStats(log logrus.FieldLogger) {
 	// TODO(arbrown) Implement OpenTelemtry stats

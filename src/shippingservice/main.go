@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"time"
 
 	"cloud.google.com/go/profiler"
@@ -72,6 +73,16 @@ func main() {
 	if value, ok := os.LookupEnv("PORT"); ok {
 		port = value
 	}
+
+	// Validate PORT is a valid number in range
+	portNum, err := strconv.Atoi(port)
+	if err != nil {
+		log.Fatalf("Invalid PORT value: %s. Must be a number.", port)
+	}
+	if portNum < 1 || portNum > 65535 {
+		log.Fatalf("Invalid PORT value: %d. Must be between 1 and 65535.", portNum)
+	}
+
 	port = fmt.Sprintf(":%s", port)
 
 	lis, err := net.Listen("tcp", port)

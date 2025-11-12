@@ -121,9 +121,18 @@ if __name__ == "__main__":
     except (KeyError, DefaultCredentialsError):
         logger.info("Tracing disabled.")
     except Exception as e:
-        logger.warn(f"Exception on Cloud Trace setup: {traceback.format_exc()}, tracing disabled.") 
+        logger.warn(f"Exception on Cloud Trace setup: {traceback.format_exc()}, tracing disabled.")
 
-    port = os.environ.get('PORT', "8080")
+    port_str = os.environ.get('PORT', "8080")
+    try:
+        port = int(port_str)
+        if port < 1 or port > 65535:
+            logger.error(f"Invalid PORT value: {port}. Must be between 1 and 65535.")
+            sys.exit(1)
+    except ValueError:
+        logger.error(f"Invalid PORT value: {port_str}. Must be a number.")
+        sys.exit(1)
+
     catalog_addr = os.environ.get('PRODUCT_CATALOG_SERVICE_ADDR', '')
     if catalog_addr == "":
         raise Exception('PRODUCT_CATALOG_SERVICE_ADDR environment variable not set')
@@ -140,8 +149,8 @@ if __name__ == "__main__":
     health_pb2_grpc.add_HealthServicer_to_server(service, server)
 
     # start server
-    logger.info("listening on port: " + port)
-    server.add_insecure_port('[::]:'+port)
+    logger.info(f"listening on port: {port}")
+    server.add_insecure_port(f'[::]:{port}')
     server.start()
 
     # keep alive

@@ -51,7 +51,18 @@ public final class AdService {
   private static final AdService service = new AdService();
 
   private void start() throws IOException {
-    int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "9555"));
+    int port;
+    try {
+      port = Integer.parseInt(System.getenv().getOrDefault("PORT", "9555"));
+      if (port < 1 || port > 65535) {
+        logger.error("Invalid PORT value: " + port + ". Must be between 1 and 65535.");
+        System.exit(1);
+      }
+    } catch (NumberFormatException e) {
+      logger.error("Invalid PORT value: " + System.getenv().get("PORT") + ". Must be a number.");
+      System.exit(1);
+      return; // Unreachable, but satisfies compiler
+    }
     healthMgr = new HealthStatusManager();
 
     server =

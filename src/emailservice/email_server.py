@@ -125,9 +125,18 @@ def start(dummy_mode):
   demo_pb2_grpc.add_EmailServiceServicer_to_server(service, server)
   health_pb2_grpc.add_HealthServicer_to_server(service, server)
 
-  port = os.environ.get('PORT', "8080")
-  logger.info("listening on port: "+port)
-  server.add_insecure_port('[::]:'+port)
+  port_str = os.environ.get('PORT', "8080")
+  try:
+    port = int(port_str)
+    if port < 1 or port > 65535:
+      logger.error(f"Invalid PORT value: {port}. Must be between 1 and 65535.")
+      sys.exit(1)
+  except ValueError:
+    logger.error(f"Invalid PORT value: {port_str}. Must be a number.")
+    sys.exit(1)
+
+  logger.info(f"listening on port: {port}")
+  server.add_insecure_port(f'[::]:{port}')
   server.start()
   try:
     while True:

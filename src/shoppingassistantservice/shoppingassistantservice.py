@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import os
+import sys
 import logging
 import re
 
@@ -38,13 +39,19 @@ MAX_PROMPT_LENGTH = 2000  # Maximum characters for user prompt
 ALLOWED_IMAGE_SCHEMES = ['http', 'https', 'data']  # Allowed URL schemes
 ALLOWED_IMAGE_DOMAINS = ['storage.googleapis.com', 'googleusercontent.com']  # Whitelist for image domains
 
-PROJECT_ID = os.environ["PROJECT_ID"]
-REGION = os.environ["REGION"]
-ALLOYDB_DATABASE_NAME = os.environ["ALLOYDB_DATABASE_NAME"]
-ALLOYDB_TABLE_NAME = os.environ["ALLOYDB_TABLE_NAME"]
-ALLOYDB_CLUSTER_NAME = os.environ["ALLOYDB_CLUSTER_NAME"]
-ALLOYDB_INSTANCE_NAME = os.environ["ALLOYDB_INSTANCE_NAME"]
-ALLOYDB_SECRET_NAME = os.environ["ALLOYDB_SECRET_NAME"]
+# Validate and load required environment variables
+try:
+    PROJECT_ID = os.environ["PROJECT_ID"]
+    REGION = os.environ["REGION"]
+    ALLOYDB_DATABASE_NAME = os.environ["ALLOYDB_DATABASE_NAME"]
+    ALLOYDB_TABLE_NAME = os.environ["ALLOYDB_TABLE_NAME"]
+    ALLOYDB_CLUSTER_NAME = os.environ["ALLOYDB_CLUSTER_NAME"]
+    ALLOYDB_INSTANCE_NAME = os.environ["ALLOYDB_INSTANCE_NAME"]
+    ALLOYDB_SECRET_NAME = os.environ["ALLOYDB_SECRET_NAME"]
+except KeyError as e:
+    logger.error(f"Missing required environment variable: {e}")
+    logger.error("Required environment variables: PROJECT_ID, REGION, ALLOYDB_DATABASE_NAME, ALLOYDB_TABLE_NAME, ALLOYDB_CLUSTER_NAME, ALLOYDB_INSTANCE_NAME, ALLOYDB_SECRET_NAME")
+    sys.exit(1)
 
 secret_manager_client = secretmanager_v1.SecretManagerServiceClient()
 secret_name = secret_manager_client.secret_version_path(project=PROJECT_ID, secret=ALLOYDB_SECRET_NAME, secret_version="latest")
@@ -196,4 +203,17 @@ def create_app():
 if __name__ == "__main__":
     # Create an instance of flask server when called directly
     app = create_app()
-    app.run(host='0.0.0.0', port=8080)
+
+    # Validate PORT environment variable
+    port_str = os.environ.get('PORT', '8080')
+    try:
+        port = int(port_str)
+        if port < 1 or port > 65535:
+            logger.error(f"Invalid PORT value: {port}. Must be between 1 and 65535.")
+            sys.exit(1)
+    except ValueError:
+        logger.error(f"Invalid PORT value: {port_str}. Must be a number.")
+        sys.exit(1)
+
+    logger.info(f"Starting Shopping Assistant service on port {port}")
+    app.run(host='0.0.0.0', port=port)
