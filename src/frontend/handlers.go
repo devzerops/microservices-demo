@@ -210,7 +210,11 @@ func (fe *frontendServer) productHandler(w http.ResponseWriter, r *http.Request)
 
 func (fe *frontendServer) addToCartHandler(w http.ResponseWriter, r *http.Request) {
 	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
-	quantity, _ := strconv.ParseUint(r.FormValue("quantity"), 10, 32)
+	quantity, err := strconv.ParseUint(r.FormValue("quantity"), 10, 32)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "invalid quantity format"), http.StatusBadRequest)
+		return
+	}
 	productID := r.FormValue("product_id")
 	payload := validator.AddToCartPayload{
 		Quantity:  quantity,
@@ -321,18 +325,37 @@ func (fe *frontendServer) placeOrderHandler(w http.ResponseWriter, r *http.Reque
 	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
 	log.Debug("placing order")
 
-	var (
-		email         = r.FormValue("email")
-		streetAddress = r.FormValue("street_address")
-		zipCode, _    = strconv.ParseInt(r.FormValue("zip_code"), 10, 32)
-		city          = r.FormValue("city")
-		state         = r.FormValue("state")
-		country       = r.FormValue("country")
-		ccNumber      = r.FormValue("credit_card_number")
-		ccMonth, _    = strconv.ParseInt(r.FormValue("credit_card_expiration_month"), 10, 32)
-		ccYear, _     = strconv.ParseInt(r.FormValue("credit_card_expiration_year"), 10, 32)
-		ccCVV, _      = strconv.ParseInt(r.FormValue("credit_card_cvv"), 10, 32)
-	)
+	email := r.FormValue("email")
+	streetAddress := r.FormValue("street_address")
+
+	zipCode, err := strconv.ParseInt(r.FormValue("zip_code"), 10, 32)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "invalid zip code format"), http.StatusBadRequest)
+		return
+	}
+
+	city := r.FormValue("city")
+	state := r.FormValue("state")
+	country := r.FormValue("country")
+	ccNumber := r.FormValue("credit_card_number")
+
+	ccMonth, err := strconv.ParseInt(r.FormValue("credit_card_expiration_month"), 10, 32)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "invalid credit card expiration month format"), http.StatusBadRequest)
+		return
+	}
+
+	ccYear, err := strconv.ParseInt(r.FormValue("credit_card_expiration_year"), 10, 32)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "invalid credit card expiration year format"), http.StatusBadRequest)
+		return
+	}
+
+	ccCVV, err := strconv.ParseInt(r.FormValue("credit_card_cvv"), 10, 32)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "invalid credit card CVV format"), http.StatusBadRequest)
+		return
+	}
 
 	payload := validator.PlaceOrderPayload{
 		Email:         email,
@@ -469,7 +492,12 @@ func (fe *frontendServer) chatBotHandler(w http.ResponseWriter, r *http.Request)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	res, err := http.DefaultClient.Do(req)
+
+	// Use HTTP client with timeout to prevent indefinite hangs
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+	res, err := httpClient.Do(req)
 	if err != nil {
 		renderHTTPError(log, r, w, errors.Wrap(err, "failed to send request"), http.StatusInternalServerError)
 		return

@@ -56,7 +56,12 @@ func (r *responseRecorder) WriteHeader(statusCode int) {
 
 func (lh *logHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	requestID, _ := uuid.NewRandom()
+	requestID, err := uuid.NewRandom()
+	if err != nil {
+		lh.log.WithError(err).Error("failed to generate request ID")
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
 	ctx = context.WithValue(ctx, ctxKeyRequestID{}, requestID.String())
 
 	start := time.Now()
@@ -91,7 +96,12 @@ func ensureSessionID(next http.Handler) http.HandlerFunc {
 				// Hard coded user id, shared across sessions
 				sessionID = "12345678-1234-1234-1234-123456789123"
 			} else {
-				u, _ := uuid.NewRandom()
+				u, err := uuid.NewRandom()
+				if err != nil {
+					log.WithError(err).Error("failed to generate session ID")
+					http.Error(w, "internal server error", http.StatusInternalServerError)
+					return
+				}
 				sessionID = u.String()
 			}
 			http.SetCookie(w, &http.Cookie{
@@ -100,6 +110,8 @@ func ensureSessionID(next http.Handler) http.HandlerFunc {
 				MaxAge: cookieMaxAge,
 			})
 		} else if err != nil {
+			log.WithError(err).Error("failed to read session cookie")
+			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		} else {
 			sessionID = c.Value
