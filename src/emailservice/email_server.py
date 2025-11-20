@@ -98,7 +98,7 @@ class EmailService(BaseEmailService):
       EmailService.send_email(self.client, email, confirmation)
     except GoogleAPICallError as err:
       context.set_details("An error occurred when sending the email.")
-      print(err.message)
+      logger.error(err.message)
       context.set_code(grpc.StatusCode.INTERNAL)
       return demo_pb2.Empty()
 
@@ -125,9 +125,18 @@ def start(dummy_mode):
   demo_pb2_grpc.add_EmailServiceServicer_to_server(service, server)
   health_pb2_grpc.add_HealthServicer_to_server(service, server)
 
-  port = os.environ.get('PORT', "8080")
-  logger.info("listening on port: "+port)
-  server.add_insecure_port('[::]:'+port)
+  port_str = os.environ.get('PORT', "8080")
+  try:
+    port = int(port_str)
+    if port < 1 or port > 65535:
+      logger.error(f"Invalid PORT value: {port}. Must be between 1 and 65535.")
+      sys.exit(1)
+  except ValueError:
+    logger.error(f"Invalid PORT value: {port_str}. Must be a number.")
+    sys.exit(1)
+
+  logger.info(f"listening on port: {port}")
+  server.add_insecure_port(f'[::]:{port}')
   server.start()
   try:
     while True:
@@ -182,8 +191,7 @@ if __name__ == '__main__':
       trace.get_tracer_provider().add_span_processor(
         BatchSpanProcessor(
             OTLPSpanExporter(
-            endpoint = otel_endpoint,
-            insecure = True
+            endpoint = otel_endpoint
           )
         )
       )

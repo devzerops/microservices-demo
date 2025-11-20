@@ -77,7 +77,13 @@ const protoLoader = require('@grpc/proto-loader');
 const MAIN_PROTO_PATH = path.join(__dirname, './proto/demo.proto');
 const HEALTH_PROTO_PATH = path.join(__dirname, './proto/grpc/health/v1/health.proto');
 
-const PORT = process.env.PORT;
+// Validate PORT environment variable with default fallback
+const PORT = process.env.PORT || '7000';
+const portNum = parseInt(PORT, 10);
+if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+  logger.error(`Invalid PORT value: ${PORT}. Must be a number between 1 and 65535. Using default 7000.`);
+  process.exit(1);
+}
 
 const shopProto = _loadProto(MAIN_PROTO_PATH).hipstershop;
 const healthProto = _loadProto(HEALTH_PROTO_PATH).grpc.health.v1;

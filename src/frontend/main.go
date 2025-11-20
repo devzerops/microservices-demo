@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"cloud.google.com/go/profiler"
@@ -123,6 +125,13 @@ func main() {
 		log.Info("Profiling disabled.")
 	}
 
+	// Initialize rate limiting
+	initRateLimiting(log)
+
+	// Initialize Prometheus metrics
+	initMetrics()
+	log.Info("Prometheus metrics initialized")
+
 	srvPort := port
 	if os.Getenv("PORT") != "" {
 		srvPort = os.Getenv("PORT")
@@ -137,13 +146,13 @@ func main() {
 	mustMapEnv(&svc.adSvcAddr, "AD_SERVICE_ADDR")
 	mustMapEnv(&svc.shoppingAssistantSvcAddr, "SHOPPING_ASSISTANT_SERVICE_ADDR")
 
-	mustConnGRPC(ctx, &svc.currencySvcConn, svc.currencySvcAddr)
-	mustConnGRPC(ctx, &svc.productCatalogSvcConn, svc.productCatalogSvcAddr)
-	mustConnGRPC(ctx, &svc.cartSvcConn, svc.cartSvcAddr)
-	mustConnGRPC(ctx, &svc.recommendationSvcConn, svc.recommendationSvcAddr)
-	mustConnGRPC(ctx, &svc.shippingSvcConn, svc.shippingSvcAddr)
-	mustConnGRPC(ctx, &svc.checkoutSvcConn, svc.checkoutSvcAddr)
-	mustConnGRPC(ctx, &svc.adSvcConn, svc.adSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.currencySvcConn, svc.currencySvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.productCatalogSvcConn, svc.productCatalogSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.cartSvcConn, svc.cartSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.recommendationSvcConn, svc.recommendationSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.shippingSvcConn, svc.shippingSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.checkoutSvcConn, svc.checkoutSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.adSvcConn, svc.adSvcAddr)
 
 	r := mux.NewRouter()
 	r.HandleFunc(baseUrl + "/", svc.homeHandler).Methods(http.MethodGet, http.MethodHead)
@@ -157,17 +166,76 @@ func main() {
 	r.HandleFunc(baseUrl + "/assistant", svc.assistantHandler).Methods(http.MethodGet)
 	r.PathPrefix(baseUrl + "/static/").Handler(http.StripPrefix(baseUrl + "/static/", http.FileServer(http.Dir("./static/"))))
 	r.HandleFunc(baseUrl + "/robots.txt", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, "User-agent: *\nDisallow: /") })
-	r.HandleFunc(baseUrl + "/_healthz", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, "ok") })
+	r.HandleFunc(baseUrl + "/_healthz", svc.livenessHandler)
+	r.HandleFunc(baseUrl + "/_readyz", svc.readinessHandler)
+	r.Handle(baseUrl + "/metrics", metricsHandler())
 	r.HandleFunc(baseUrl + "/product-meta/{ids}", svc.getProductByID).Methods(http.MethodGet)
 	r.HandleFunc(baseUrl + "/bot", svc.chatBotHandler).Methods(http.MethodPost)
 
 	var handler http.Handler = r
+	handler = requestIDMiddleware(handler)             // add request ID (Istio compatible)
 	handler = &logHandler{log: log, next: handler}     // add logging
 	handler = ensureSessionID(handler)                 // add session ID
+	handler = rateLimitMiddleware(handler)             // add rate limiting
+	handler = csrfProtection(handler)                  // add CSRF protection
+	handler = securityHeadersMiddleware(handler)       // add HTTP security headers
 	handler = otelhttp.NewHandler(handler, "frontend") // add OTel tracing
 
-	log.Infof("starting server on " + addr + ":" + srvPort)
-	log.Fatal(http.ListenAndServe(addr+":"+srvPort, handler))
+	// Create HTTP server with graceful shutdown support
+	srv := &http.Server{
+		Addr:    addr + ":" + srvPort,
+		Handler: handler,
+	}
+
+	// Run HTTP server in goroutine
+	go func() {
+		log.Infof("starting server on " + addr + ":" + srvPort)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("HTTP server error: %v", err)
+		}
+	}()
+
+	// Setup signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	<-sigChan
+
+	log.Info("Shutdown signal received, cleaning up...")
+
+	// Shutdown HTTP server with timeout
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Errorf("HTTP server shutdown error: %v", err)
+	}
+
+	// Close all gRPC connections
+	if svc.currencySvcConn != nil {
+		svc.currencySvcConn.Close()
+	}
+	if svc.productCatalogSvcConn != nil {
+		svc.productCatalogSvcConn.Close()
+	}
+	if svc.cartSvcConn != nil {
+		svc.cartSvcConn.Close()
+	}
+	if svc.recommendationSvcConn != nil {
+		svc.recommendationSvcConn.Close()
+	}
+	if svc.shippingSvcConn != nil {
+		svc.shippingSvcConn.Close()
+	}
+	if svc.checkoutSvcConn != nil {
+		svc.checkoutSvcConn.Close()
+	}
+	if svc.adSvcConn != nil {
+		svc.adSvcConn.Close()
+	}
+	if svc.collectorConn != nil {
+		svc.collectorConn.Close()
+	}
+
+	log.Info("Cleanup complete, exiting")
 }
 func initStats(log logrus.FieldLogger) {
 	// TODO(arbrown) Implement OpenTelemtry stats
@@ -175,7 +243,7 @@ func initStats(log logrus.FieldLogger) {
 
 func initTracing(log logrus.FieldLogger, ctx context.Context, svc *frontendServer) (*sdktrace.TracerProvider, error) {
 	mustMapEnv(&svc.collectorAddr, "COLLECTOR_SERVICE_ADDR")
-	mustConnGRPC(ctx, &svc.collectorConn, svc.collectorAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.collectorConn, svc.collectorAddr)
 	exporter, err := otlptracegrpc.New(
 		ctx,
 		otlptracegrpc.WithGRPCConn(svc.collectorConn))
@@ -219,17 +287,4 @@ func mustMapEnv(target *string, envKey string) {
 		panic(fmt.Sprintf("environment variable %q not set", envKey))
 	}
 	*target = v
-}
-
-func mustConnGRPC(ctx context.Context, conn **grpc.ClientConn, addr string) {
-	var err error
-	ctx, cancel := context.WithTimeout(ctx, time.Second*3)
-	defer cancel()
-	*conn, err = grpc.DialContext(ctx, addr,
-		grpc.WithInsecure(),
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()))
-	if err != nil {
-		panic(errors.Wrapf(err, "grpc: failed to connect %s", addr))
-	}
 }

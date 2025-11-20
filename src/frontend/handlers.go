@@ -93,7 +93,7 @@ func (fe *frontendServer) homeHandler(w http.ResponseWriter, r *http.Request) {
 	var env = os.Getenv("ENV_PLATFORM")
 	// Only override from env variable if set + valid env
 	if env == "" || stringinSlice(validEnvs, env) == false {
-		fmt.Println("env platform is either empty or invalid")
+		log.Debug("env platform is either empty or invalid, defaulting to local")
 		env = "local"
 	}
 	// Autodetect GCP
@@ -191,7 +191,7 @@ func (fe *frontendServer) productHandler(w http.ResponseWriter, r *http.Request)
 	if isPackagingServiceConfigured() {
 		packagingInfo, err = httpGetPackagingInfo(id)
 		if err != nil {
-			fmt.Println("Failed to obtain product's packaging info:", err)
+			log.WithField("error", err).Warn("Failed to obtain product's packaging info")
 		}
 	}
 
@@ -204,13 +204,17 @@ func (fe *frontendServer) productHandler(w http.ResponseWriter, r *http.Request)
 		"cart_size":       cartSize(cart),
 		"packagingInfo":   packagingInfo,
 	})); err != nil {
-		log.Println(err)
+		log.WithError(err).Error("failed to execute product template")
 	}
 }
 
 func (fe *frontendServer) addToCartHandler(w http.ResponseWriter, r *http.Request) {
 	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
-	quantity, _ := strconv.ParseUint(r.FormValue("quantity"), 10, 32)
+	quantity, err := strconv.ParseUint(r.FormValue("quantity"), 10, 32)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "invalid quantity format"), http.StatusBadRequest)
+		return
+	}
 	productID := r.FormValue("product_id")
 	payload := validator.AddToCartPayload{
 		Quantity:  quantity,
@@ -313,7 +317,7 @@ func (fe *frontendServer) viewCartHandler(w http.ResponseWriter, r *http.Request
 		"items":            items,
 		"expiration_years": []int{year, year + 1, year + 2, year + 3, year + 4},
 	})); err != nil {
-		log.Println(err)
+		log.WithError(err).Error("failed to execute cart template")
 	}
 }
 
@@ -321,18 +325,37 @@ func (fe *frontendServer) placeOrderHandler(w http.ResponseWriter, r *http.Reque
 	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
 	log.Debug("placing order")
 
-	var (
-		email         = r.FormValue("email")
-		streetAddress = r.FormValue("street_address")
-		zipCode, _    = strconv.ParseInt(r.FormValue("zip_code"), 10, 32)
-		city          = r.FormValue("city")
-		state         = r.FormValue("state")
-		country       = r.FormValue("country")
-		ccNumber      = r.FormValue("credit_card_number")
-		ccMonth, _    = strconv.ParseInt(r.FormValue("credit_card_expiration_month"), 10, 32)
-		ccYear, _     = strconv.ParseInt(r.FormValue("credit_card_expiration_year"), 10, 32)
-		ccCVV, _      = strconv.ParseInt(r.FormValue("credit_card_cvv"), 10, 32)
-	)
+	email := r.FormValue("email")
+	streetAddress := r.FormValue("street_address")
+
+	zipCode, err := strconv.ParseInt(r.FormValue("zip_code"), 10, 32)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "invalid zip code format"), http.StatusBadRequest)
+		return
+	}
+
+	city := r.FormValue("city")
+	state := r.FormValue("state")
+	country := r.FormValue("country")
+	ccNumber := r.FormValue("credit_card_number")
+
+	ccMonth, err := strconv.ParseInt(r.FormValue("credit_card_expiration_month"), 10, 32)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "invalid credit card expiration month format"), http.StatusBadRequest)
+		return
+	}
+
+	ccYear, err := strconv.ParseInt(r.FormValue("credit_card_expiration_year"), 10, 32)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "invalid credit card expiration year format"), http.StatusBadRequest)
+		return
+	}
+
+	ccCVV, err := strconv.ParseInt(r.FormValue("credit_card_cvv"), 10, 32)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "invalid credit card CVV format"), http.StatusBadRequest)
+		return
+	}
 
 	payload := validator.PlaceOrderPayload{
 		Email:         email,
@@ -396,11 +419,12 @@ func (fe *frontendServer) placeOrderHandler(w http.ResponseWriter, r *http.Reque
 		"total_paid":      &totalPaid,
 		"recommendations": recommendations,
 	})); err != nil {
-		log.Println(err)
+		log.WithError(err).Error("failed to execute order template")
 	}
 }
 
 func (fe *frontendServer) assistantHandler(w http.ResponseWriter, r *http.Request) {
+	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
 	currencies, err := fe.getCurrencies(r.Context())
 	if err != nil {
 		renderHTTPError(log, r, w, errors.Wrap(err, "could not retrieve currencies"), http.StatusInternalServerError)
@@ -411,7 +435,7 @@ func (fe *frontendServer) assistantHandler(w http.ResponseWriter, r *http.Reques
 		"show_currency": false,
 		"currencies":    currencies,
 	})); err != nil {
-		log.Println(err)
+		log.WithError(err).Error("failed to execute assistant template")
 	}
 }
 
@@ -428,28 +452,40 @@ func (fe *frontendServer) logoutHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (fe *frontendServer) getProductByID(w http.ResponseWriter, r *http.Request) {
+	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
 	id := mux.Vars(r)["ids"]
 	if id == "" {
+		renderHTTPError(log, r, w, errors.New("product id not specified"), http.StatusBadRequest)
 		return
 	}
 
 	p, err := fe.getProduct(r.Context(), id)
 	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "could not retrieve product"), http.StatusInternalServerError)
 		return
 	}
 
 	jsonData, err := json.Marshal(p)
 	if err != nil {
-		fmt.Println(err)
+		renderHTTPError(log, r, w, errors.Wrap(err, "failed to marshal product data"), http.StatusInternalServerError)
 		return
 	}
 
-	w.Write(jsonData)
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	w.Write(jsonData)
 }
 
 func (fe *frontendServer) chatBotHandler(w http.ResponseWriter, r *http.Request) {
 	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
+
+	// Validate Content-Type to prevent malformed requests
+	contentType := r.Header.Get("Content-Type")
+	if contentType != "application/json" {
+		renderHTTPError(log, r, w, errors.New("Content-Type must be application/json"), http.StatusBadRequest)
+		return
+	}
+
 	type Response struct {
 		Message string `json:"message"`
 	}
@@ -469,7 +505,12 @@ func (fe *frontendServer) chatBotHandler(w http.ResponseWriter, r *http.Request)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	res, err := http.DefaultClient.Do(req)
+
+	// Use HTTP client with timeout to prevent indefinite hangs
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+	res, err := httpClient.Do(req)
 	if err != nil {
 		renderHTTPError(log, r, w, errors.Wrap(err, "failed to send request"), http.StatusInternalServerError)
 		return
@@ -481,8 +522,10 @@ func (fe *frontendServer) chatBotHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	fmt.Printf("%+v\n", body)
-	fmt.Printf("%+v\n", res)
+	log.WithFields(logrus.Fields{
+		"response_body":   string(body),
+		"response_status": res.StatusCode,
+	}).Debug("Received response from shopping assistant service")
 
 	err = json.Unmarshal(body, &response)
 	if err != nil {
@@ -544,7 +587,7 @@ func renderHTTPError(log logrus.FieldLogger, r *http.Request, w http.ResponseWri
 		"status_code": code,
 		"status":      http.StatusText(code),
 	})); templateErr != nil {
-		log.Println(templateErr)
+		log.WithError(templateErr).Error("failed to execute error template")
 	}
 }
 
@@ -561,6 +604,7 @@ func injectCommonTemplateData(r *http.Request, payload map[string]interface{}) m
 		"frontendMessage":   frontendMessage,
 		"currentYear":       time.Now().Year(),
 		"baseUrl":           baseUrl,
+		"csrf_token":        r.Context().Value(ctxKeyCSRFToken{}),
 	}
 
 	for k, v := range payload {

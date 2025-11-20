@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using cartservice.cartstore;
 using cartservice.services;
 using Microsoft.Extensions.Caching.StackExchangeRedis;
@@ -15,9 +16,12 @@ namespace cartservice
 {
     public class Startup
     {
-        public Startup(IConfiguration configuration)
+        private readonly ILogger<Startup> _logger;
+
+        public Startup(IConfiguration configuration, ILogger<Startup> logger)
         {
             Configuration = configuration;
+            _logger = logger;
         }
 
         public IConfiguration Configuration { get; }
@@ -35,7 +39,15 @@ namespace cartservice
             {
                 services.AddStackExchangeRedisCache(options =>
                 {
-                    options.Configuration = redisAddress;
+                    // Enable SSL for production Redis connections
+                    // Format: "host:port,ssl=true,abortConnect=false"
+                    string redisConfig = redisAddress;
+                    if (!redisAddress.Contains("ssl="))
+                    {
+                        redisConfig = $"{redisAddress},ssl=true,abortConnect=false";
+                    }
+                    options.Configuration = redisConfig;
+                    _logger.LogInformation("Redis configured with SSL enabled: {RedisAddress}", redisAddress);
                 });
                 services.AddSingleton<ICartStore, RedisCartStore>();
             }
@@ -45,12 +57,12 @@ namespace cartservice
             }
             else if (!string.IsNullOrEmpty(alloyDBConnectionString))
             {
-                Console.WriteLine("Creating AlloyDB cart store");
+                _logger.LogInformation("Creating AlloyDB cart store");
                 services.AddSingleton<ICartStore, AlloyDBCartStore>();
             }
             else
             {
-                Console.WriteLine("Redis cache host(hostname+port) was not specified. Starting a cart service using in memory store");
+                _logger.LogInformation("Redis cache host was not specified. Starting cart service using in-memory store");
                 services.AddDistributedMemoryCache();
                 services.AddSingleton<ICartStore, RedisCartStore>();
             }

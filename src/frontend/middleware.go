@@ -25,7 +25,6 @@ import (
 )
 
 type ctxKeyLog struct{}
-type ctxKeyRequestID struct{}
 
 type logHandler struct {
 	log  *logrus.Logger
@@ -56,15 +55,16 @@ func (r *responseRecorder) WriteHeader(statusCode int) {
 
 func (lh *logHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	requestID, _ := uuid.NewRandom()
-	ctx = context.WithValue(ctx, ctxKeyRequestID{}, requestID.String())
+
+	// Get request ID from context (set by requestIDMiddleware)
+	requestID := getRequestID(ctx)
 
 	start := time.Now()
 	rr := &responseRecorder{w: w}
 	log := lh.log.WithFields(logrus.Fields{
 		"http.req.path":   r.URL.Path,
 		"http.req.method": r.Method,
-		"http.req.id":     requestID.String(),
+		"http.req.id":     requestID,
 	})
 	if v, ok := r.Context().Value(ctxKeySessionID{}).(string); ok {
 		log = log.WithField("session", v)
@@ -91,7 +91,12 @@ func ensureSessionID(next http.Handler) http.HandlerFunc {
 				// Hard coded user id, shared across sessions
 				sessionID = "12345678-1234-1234-1234-123456789123"
 			} else {
-				u, _ := uuid.NewRandom()
+				u, err := uuid.NewRandom()
+				if err != nil {
+					log.WithError(err).Error("failed to generate session ID")
+					http.Error(w, "internal server error", http.StatusInternalServerError)
+					return
+				}
 				sessionID = u.String()
 			}
 			http.SetCookie(w, &http.Cookie{
@@ -100,6 +105,8 @@ func ensureSessionID(next http.Handler) http.HandlerFunc {
 				MaxAge: cookieMaxAge,
 			})
 		} else if err != nil {
+			log.WithError(err).Error("failed to read session cookie")
+			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		} else {
 			sessionID = c.Value

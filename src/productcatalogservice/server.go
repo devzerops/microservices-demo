@@ -21,6 +21,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -100,7 +101,7 @@ func main() {
 	go func() {
 		for {
 			sig := <-sigs
-			log.Printf("Received signal: %s", sig)
+			log.Infof("Received signal: %s", sig)
 			if sig == syscall.SIGUSR1 {
 				reloadCatalog = true
 				log.Infof("Enable catalog reloading")
@@ -114,6 +115,16 @@ func main() {
 	if os.Getenv("PORT") != "" {
 		port = os.Getenv("PORT")
 	}
+
+	// Validate PORT is a valid number in range
+	portNum, err := strconv.Atoi(port)
+	if err != nil {
+		log.Fatalf("Invalid PORT value: %s. Must be a number.", port)
+	}
+	if portNum < 1 || portNum > 65535 {
+		log.Fatalf("Invalid PORT value: %d. Must be between 1 and 65535.", portNum)
+	}
+
 	log.Infof("starting grpc server at :%s", port)
 	run(port)
 	select {}

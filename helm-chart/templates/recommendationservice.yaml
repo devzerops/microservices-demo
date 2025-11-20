@@ -99,6 +99,10 @@ spec:
         - name: DISABLE_PROFILER
           value: "1"
         {{- end }}
+        {{- if .Values.securityFeatures.grpcTls.enabled }}
+        - name: ENABLE_GRPC_TLS
+          value: {{ .Values.securityFeatures.grpcTls.mode | quote }}
+        {{- end }}
         resources:
           {{- toYaml .Values.recommendationService.resources | nindent 10 }}
 ---

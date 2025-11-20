@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"cloud.google.com/go/profiler"
@@ -113,12 +115,12 @@ func main() {
 	mustMapEnv(&svc.emailSvcAddr, "EMAIL_SERVICE_ADDR")
 	mustMapEnv(&svc.paymentSvcAddr, "PAYMENT_SERVICE_ADDR")
 
-	mustConnGRPC(ctx, &svc.shippingSvcConn, svc.shippingSvcAddr)
-	mustConnGRPC(ctx, &svc.productCatalogSvcConn, svc.productCatalogSvcAddr)
-	mustConnGRPC(ctx, &svc.cartSvcConn, svc.cartSvcAddr)
-	mustConnGRPC(ctx, &svc.currencySvcConn, svc.currencySvcAddr)
-	mustConnGRPC(ctx, &svc.emailSvcConn, svc.emailSvcAddr)
-	mustConnGRPC(ctx, &svc.paymentSvcConn, svc.paymentSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.shippingSvcConn, svc.shippingSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.productCatalogSvcConn, svc.productCatalogSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.cartSvcConn, svc.cartSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.currencySvcConn, svc.currencySvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.emailSvcConn, svc.emailSvcAddr)
+	mustConnGRPCWithTLS(ctx, log, &svc.paymentSvcConn, svc.paymentSvcAddr)
 
 	log.Infof("service config: %+v", svc)
 
@@ -140,9 +142,46 @@ func main() {
 
 	pb.RegisterCheckoutServiceServer(srv, svc)
 	healthpb.RegisterHealthServer(srv, svc)
-	log.Infof("starting to listen on tcp: %q", lis.Addr().String())
-	err = srv.Serve(lis)
-	log.Fatal(err)
+
+	// Run gRPC server in goroutine
+	go func() {
+		log.Infof("starting to listen on tcp: %q", lis.Addr().String())
+		if err := srv.Serve(lis); err != nil {
+			log.Fatalf("gRPC server error: %v", err)
+		}
+	}()
+
+	// Setup signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	<-sigChan
+
+	log.Info("Shutdown signal received, cleaning up...")
+
+	// Gracefully stop gRPC server
+	srv.GracefulStop()
+
+	// Close all gRPC client connections
+	if svc.shippingSvcConn != nil {
+		svc.shippingSvcConn.Close()
+	}
+	if svc.productCatalogSvcConn != nil {
+		svc.productCatalogSvcConn.Close()
+	}
+	if svc.cartSvcConn != nil {
+		svc.cartSvcConn.Close()
+	}
+	if svc.currencySvcConn != nil {
+		svc.currencySvcConn.Close()
+	}
+	if svc.emailSvcConn != nil {
+		svc.emailSvcConn.Close()
+	}
+	if svc.paymentSvcConn != nil {
+		svc.paymentSvcConn.Close()
+	}
+
+	log.Info("Cleanup complete, exiting")
 }
 
 func initStats() {
@@ -203,19 +242,6 @@ func mustMapEnv(target *string, envKey string) {
 		panic(fmt.Sprintf("environment variable %q not set", envKey))
 	}
 	*target = v
-}
-
-func mustConnGRPC(ctx context.Context, conn **grpc.ClientConn, addr string) {
-	var err error
-	ctx, cancel := context.WithTimeout(ctx, time.Second*3)
-	defer cancel()
-	*conn, err = grpc.DialContext(ctx, addr,
-		grpc.WithInsecure(),
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()))
-	if err != nil {
-		panic(errors.Wrapf(err, "grpc: failed to connect %s", addr))
-	}
 }
 
 func (cs *checkoutService) Check(ctx context.Context, req *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
@@ -356,7 +382,8 @@ func (cs *checkoutService) prepOrderItems(ctx context.Context, items []*pb.CartI
 }
 
 func (cs *checkoutService) convertCurrency(ctx context.Context, from *pb.Money, toCurrency string) (*pb.Money, error) {
-	result, err := pb.NewCurrencyServiceClient(cs.currencySvcConn).Convert(context.TODO(), &pb.CurrencyConversionRequest{
+	// Use passed context to preserve timeout and tracing information
+	result, err := pb.NewCurrencyServiceClient(cs.currencySvcConn).Convert(ctx, &pb.CurrencyConversionRequest{
 		From:   from,
 		ToCode: toCurrency})
 	if err != nil {

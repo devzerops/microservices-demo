@@ -107,7 +107,7 @@ func loadCatalogFromAlloyDB(catalog *pb.ListProductsResponse) error {
 	defer cleanup()
 
 	dsn := fmt.Sprintf(
-		"user=%s password=%s dbname=%s sslmode=disable",
+		"user=%s password=%s dbname=%s sslmode=require",
 		"postgres", pgPassword, pgDatabaseName,
 	)
 

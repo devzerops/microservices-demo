@@ -35,7 +35,10 @@ func initializeLogger() {
 
 func loadDeploymentDetails() {
 	deploymentDetailsMap = make(map[string]string)
-	var metaServerClient = metadata.NewClient(&http.Client{})
+	// Create HTTP client with timeout to prevent indefinite hangs
+	var metaServerClient = metadata.NewClient(&http.Client{
+		Timeout: 10 * time.Second,
+	})
 
 	podHostname, err := os.Hostname()
 	if err != nil {

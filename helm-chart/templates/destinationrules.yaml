@@ -1,0 +1,117 @@
+{{- if .Values.istio.enabled }}
+{{- if .Values.istio.circuitBreaker.enabled }}
+# DestinationRules for Circuit Breaker patterns
+# These implement the Circuit Breaker pattern to prevent cascading failures
+# when services become unhealthy or overloaded.
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: productcatalogservice
+  namespace: {{ .Release.Namespace }}
+spec:
+  host: productcatalogservice
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: {{ .Values.istio.circuitBreaker.maxConnections }}
+      http:
+        http1MaxPendingRequests: {{ .Values.istio.circuitBreaker.http1MaxPendingRequests }}
+        http2MaxRequests: {{ .Values.istio.circuitBreaker.http2MaxRequests }}
+        maxRequestsPerConnection: {{ .Values.istio.circuitBreaker.maxRequestsPerConnection }}
+    outlierDetection:
+      consecutiveErrors: {{ .Values.istio.circuitBreaker.consecutiveErrors }}
+      interval: {{ .Values.istio.circuitBreaker.interval }}
+      baseEjectionTime: {{ .Values.istio.circuitBreaker.baseEjectionTime }}
+      maxEjectionPercent: {{ .Values.istio.circuitBreaker.maxEjectionPercent }}
+      minHealthPercent: {{ .Values.istio.circuitBreaker.minHealthPercent }}
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: currencyservice
+  namespace: {{ .Release.Namespace }}
+spec:
+  host: currencyservice
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: {{ .Values.istio.circuitBreaker.maxConnections }}
+      http:
+        http1MaxPendingRequests: {{ .Values.istio.circuitBreaker.http1MaxPendingRequests }}
+        http2MaxRequests: {{ .Values.istio.circuitBreaker.http2MaxRequests }}
+        maxRequestsPerConnection: {{ .Values.istio.circuitBreaker.maxRequestsPerConnection }}
+    outlierDetection:
+      consecutiveErrors: {{ .Values.istio.circuitBreaker.consecutiveErrors }}
+      interval: {{ .Values.istio.circuitBreaker.interval }}
+      baseEjectionTime: {{ .Values.istio.circuitBreaker.baseEjectionTime }}
+      maxEjectionPercent: {{ .Values.istio.circuitBreaker.maxEjectionPercent }}
+      minHealthPercent: {{ .Values.istio.circuitBreaker.minHealthPercent }}
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: cartservice
+  namespace: {{ .Release.Namespace }}
+spec:
+  host: cartservice
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: {{ .Values.istio.circuitBreaker.maxConnections }}
+      http:
+        http1MaxPendingRequests: {{ .Values.istio.circuitBreaker.http1MaxPendingRequests }}
+        http2MaxRequests: {{ .Values.istio.circuitBreaker.http2MaxRequests }}
+        maxRequestsPerConnection: {{ .Values.istio.circuitBreaker.maxRequestsPerConnection }}
+    outlierDetection:
+      consecutiveErrors: {{ .Values.istio.circuitBreaker.consecutiveErrors }}
+      interval: {{ .Values.istio.circuitBreaker.interval }}
+      baseEjectionTime: {{ .Values.istio.circuitBreaker.baseEjectionTime }}
+      maxEjectionPercent: {{ .Values.istio.circuitBreaker.maxEjectionPercent }}
+      minHealthPercent: {{ .Values.istio.circuitBreaker.minHealthPercent }}
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: recommendationservice
+  namespace: {{ .Release.Namespace }}
+spec:
+  host: recommendationservice
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: {{ .Values.istio.circuitBreaker.maxConnections }}
+      http:
+        http1MaxPendingRequests: {{ .Values.istio.circuitBreaker.http1MaxPendingRequests }}
+        http2MaxRequests: {{ .Values.istio.circuitBreaker.http2MaxRequests }}
+        maxRequestsPerConnection: {{ .Values.istio.circuitBreaker.maxRequestsPerConnection }}
+    outlierDetection:
+      consecutiveErrors: {{ .Values.istio.circuitBreaker.consecutiveErrors }}
+      interval: {{ .Values.istio.circuitBreaker.interval }}
+      baseEjectionTime: {{ .Values.istio.circuitBreaker.baseEjectionTime }}
+      maxEjectionPercent: {{ .Values.istio.circuitBreaker.maxEjectionPercent }}
+      minHealthPercent: {{ .Values.istio.circuitBreaker.minHealthPercent }}
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: checkoutservice
+  namespace: {{ .Release.Namespace }}
+spec:
+  host: checkoutservice
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: {{ .Values.istio.circuitBreaker.maxConnections }}
+      http:
+        http1MaxPendingRequests: {{ .Values.istio.circuitBreaker.http1MaxPendingRequests }}
+        http2MaxRequests: {{ .Values.istio.circuitBreaker.http2MaxRequests }}
+        maxRequestsPerConnection: {{ .Values.istio.circuitBreaker.maxRequestsPerConnection }}
+    outlierDetection:
+      consecutiveErrors: {{ .Values.istio.circuitBreaker.consecutiveErrors }}
+      interval: {{ .Values.istio.circuitBreaker.interval }}
+      baseEjectionTime: {{ .Values.istio.circuitBreaker.baseEjectionTime }}
+      maxEjectionPercent: {{ .Values.istio.circuitBreaker.maxEjectionPercent }}
+      minHealthPercent: {{ .Values.istio.circuitBreaker.minHealthPercent }}
+{{- end }}
+{{- end }}

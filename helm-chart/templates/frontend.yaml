@@ -74,6 +74,19 @@ spec:
           ports:
           - containerPort: 8080
           readinessProbe:
+{{- if .Values.resilience.enhancedProbes.enabled }}
+            initialDelaySeconds: {{ .Values.resilience.enhancedProbes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.resilience.enhancedProbes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.resilience.enhancedProbes.readiness.timeoutSeconds }}
+            successThreshold: {{ .Values.resilience.enhancedProbes.readiness.successThreshold }}
+            failureThreshold: {{ .Values.resilience.enhancedProbes.readiness.failureThreshold }}
+            httpGet:
+              path: "/_readyz"
+              port: 8080
+              httpHeaders:
+              - name: "Cookie"
+                value: "shop_session-id=x-readiness-probe"
+{{- else }}
             initialDelaySeconds: 10
             httpGet:
               path: "/_healthz"
@@ -81,7 +94,21 @@ spec:
               httpHeaders:
               - name: "Cookie"
                 value: "shop_session-id=x-readiness-probe"
+{{- end }}
           livenessProbe:
+{{- if .Values.resilience.enhancedProbes.enabled }}
+            initialDelaySeconds: {{ .Values.resilience.enhancedProbes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.resilience.enhancedProbes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.resilience.enhancedProbes.liveness.timeoutSeconds }}
+            successThreshold: {{ .Values.resilience.enhancedProbes.liveness.successThreshold }}
+            failureThreshold: {{ .Values.resilience.enhancedProbes.liveness.failureThreshold }}
+            httpGet:
+              path: "/_healthz"
+              port: 8080
+              httpHeaders:
+              - name: "Cookie"
+                value: "shop_session-id=x-liveness-probe"
+{{- else }}
             initialDelaySeconds: 10
             httpGet:
               path: "/_healthz"
@@ -89,6 +116,7 @@ spec:
               httpHeaders:
               - name: "Cookie"
                 value: "shop_session-id=x-liveness-probe"
+{{- end }}
           env:
           - name: PORT
             value: "8080"
@@ -130,6 +158,20 @@ spec:
             value: {{ .Values.shoppingAssistantService.create | quote }}
           - name: ENABLE_SINGLE_SHARED_SESSION
             value: {{ .Values.frontend.singleSharedSession | quote }}
+          {{- if .Values.securityFeatures.rateLimiting.enabled }}
+          - name: ENABLE_RATE_LIMITING
+            value: "true"
+          - name: RATE_LIMIT_AI
+            value: {{ .Values.securityFeatures.rateLimiting.aiLimit | quote }}
+          - name: RATE_LIMIT_POST
+            value: {{ .Values.securityFeatures.rateLimiting.postLimit | quote }}
+          - name: RATE_LIMIT_GET
+            value: {{ .Values.securityFeatures.rateLimiting.getLimit | quote }}
+          {{- end }}
+          {{- if .Values.securityFeatures.grpcTls.enabled }}
+          - name: ENABLE_GRPC_TLS
+            value: {{ .Values.securityFeatures.grpcTls.mode | quote }}
+          {{- end }}
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
 ---

@@ -16,6 +16,87 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+# Security Features
+# Enable enhanced security features added to the demo (for practice/demo purposes)
+securityFeatures:
+  # Rate limiting - protects against API abuse and DoS attacks
+  rateLimiting:
+    enabled: true  # Set to true to enable rate limiting on frontend
+    aiLimit: 20    # AI assistant requests per minute (default: 10, relaxed for demo)
+    postLimit: 100 # POST requests per minute (default: 60, relaxed for demo)
+    getLimit: 200  # GET requests per minute (default: 120, relaxed for demo)
+  # gRPC TLS - encrypts inter-service communication
+  # Note: Requires TLS certificates to be configured. Leave disabled for easy demo setup.
+  grpcTls:
+    enabled: false # Set to true only if you have TLS certificates configured
+    mode: "false"  # Options: "true"/"system" (production), "skip-verify" (testing), "false" (disabled)
+
+# Istio Service Mesh Features
+# Enable Istio-based resilience and traffic management features
+# Note: Requires Istio to be installed in the cluster. Leave disabled if Istio is not available.
+istio:
+  enabled: false  # Set to true to enable Istio features
+  # Circuit Breaker - prevents cascading failures (application-level)
+  circuitBreaker:
+    enabled: false  # Enable circuit breaker via DestinationRules
+    # Connection pool settings
+    maxConnections: 100
+    http1MaxPendingRequests: 50
+    http2MaxRequests: 100
+    maxRequestsPerConnection: 2
+    # Outlier detection (circuit breaker logic)
+    consecutiveErrors: 5        # Number of errors before ejecting a pod
+    interval: 30s               # Time between ejection analysis
+    baseEjectionTime: 30s       # Minimum ejection duration
+    maxEjectionPercent: 50      # Maximum percentage of pods that can be ejected
+    minHealthPercent: 50        # Minimum percentage of healthy pods required
+  # Retry - automatic retry with exponential backoff (network-level)
+  retry:
+    enabled: false  # Enable retry via VirtualServices
+    attempts: 3                 # Number of retry attempts
+    perTryTimeout: 2s           # Timeout for each retry attempt
+    timeout: 10s                # Total timeout including all retries
+    retryOn: "5xx,reset,connect-failure,refused-stream"  # Conditions that trigger retry
+
+# Kubernetes Native Resilience Features
+# These work WITH or WITHOUT Istio for defense-in-depth
+# Best Practice: Enable both Kubernetes native + Istio features together
+resilience:
+  # PodDisruptionBudget - ensures availability during voluntary disruptions
+  # Works at infrastructure level (node drains, upgrades)
+  # Complements Istio's circuit breaker which works at application level
+  podDisruptionBudget:
+    enabled: false  # Set to true to enable PDB for zero-downtime deployments
+    minAvailable: 1  # Minimum number of pods that must remain available
+
+  # HorizontalPodAutoscaler - automatic scaling based on load
+  # Works at pod level (scales replicas)
+  # Complements Istio's retry which works at request level
+  horizontalPodAutoscaler:
+    enabled: false  # Set to true to enable auto-scaling
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80  # Optional
+
+  # Enhanced Readiness/Liveness Probes
+  # Works at pod health level (removes unhealthy pods from service)
+  # Complements Istio's outlier detection which works at request level
+  enhancedProbes:
+    enabled: true  # Use improved health checks with dependency verification
+    readiness:
+      initialDelaySeconds: 10
+      periodSeconds: 5
+      timeoutSeconds: 3
+      successThreshold: 1
+      failureThreshold: 3  # Pod marked unready after 3 failures
+    liveness:
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 3
+      successThreshold: 1
+      failureThreshold: 3  # Pod restarted after 3 failures
+
 images:
   repository: us-central1-docker.pkg.dev/google-samples/microservices-demo
   # Overrides the image tag whose default is the chart appVersion.
